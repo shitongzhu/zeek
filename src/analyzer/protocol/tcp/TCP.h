@@ -2,6 +2,10 @@
 
 #pragma once
 
+//#include <unistd.h>
+//#include <sys/types.h>
+//#include <sys/wait.h>
+
 #include "zeek/analyzer/Analyzer.h"
 #include "zeek/IPAddr.h"
 #include "zeek/analyzer/protocol/tcp/TCP_Endpoint.h"
@@ -25,6 +29,10 @@ class TCP_Analyzer final : public analyzer::TransportLayerAnalyzer {
 public:
 	explicit TCP_Analyzer(Connection* conn);
 	~TCP_Analyzer() override;
+ 
+	//Pengxiong's code
+	TCP_Analyzer(const TCP_Analyzer& tcp_analyzer);
+	Analyzer* clone() override { printf("TCP_Analyzer clone\n"); return new TCP_Analyzer(*this); };
 
 	void EnableReassembly();
 
@@ -85,6 +93,15 @@ protected:
 	void Undelivered(uint64_t seq, int len, bool orig) override;
 	void FlipRoles() override;
 	bool IsReuse(double t, const u_char* pkt) override;
+ 
+	//Pengxiong's code
+	void DeliverPacketPerFork(int len, const u_char* data, bool is_orig,
+	                          uint64_t seq, const IP_Hdr* ip, int caplen, 
+	                          TCP_Endpoint* orig, const struct tcphdr* tp);
+	int find_ambiguity(int len, const u_char* data, bool is_orig,
+	                   uint64_t seq, const IP_Hdr* ip, int caplen, const struct tcphdr* tp);
+	void execute_ambiguity_action(int action);	
+	bool ValidateMD5Option(const struct tcphdr* tcp);
 
 	// Returns the TCP header pointed to by data (which we assume is
 	// aligned), updating data, len & caplen.  Returns nil if the header
@@ -172,6 +189,11 @@ private:
 
 	TCP_Endpoint* orig;
 	TCP_Endpoint* resp;
+ 
+	//Pengxiong
+	using tcp_endpoint_list = std::list<analyzer::tcp::TCP_Endpoint*>;
+	tcp_endpoint_list orig_forks, resp_forks;
+	//TODO: list of forked ambuities  
 
 	using analyzer_list = std::list<analyzer::Analyzer*>;
 	analyzer_list packet_children;
@@ -200,6 +222,13 @@ public:
 
 	explicit TCP_ApplicationAnalyzer(Connection* conn)
 		: Analyzer(conn), tcp(nullptr) { }
+ 
+	TCP_ApplicationAnalyzer(const TCP_ApplicationAnalyzer& tcp_aa)
+		: Analyzer(tcp_aa) 
+		{ 
+			printf("TCP_ApplicationAnalyzer(const TCP_ApplicationAnalyzer&)\n"); 
+			tcp = tcp_aa.tcp; 
+		}
 
 	~TCP_ApplicationAnalyzer() override { }
 
@@ -251,6 +280,12 @@ class TCP_SupportAnalyzer : public analyzer::SupportAnalyzer {
 public:
 	TCP_SupportAnalyzer(const char* name, Connection* conn, bool arg_orig)
 		: analyzer::SupportAnalyzer(name, conn, arg_orig)	{ }
+ 
+	TCP_SupportAnalyzer(const TCP_SupportAnalyzer& tcp_sa)
+		: analyzer::SupportAnalyzer(tcp_sa) 
+		{ 
+			printf("TCP_SupportAnalyzer(const TCP_SupportAnalyzer&)\n"); 
+		}
 
 	~TCP_SupportAnalyzer() override {}
 

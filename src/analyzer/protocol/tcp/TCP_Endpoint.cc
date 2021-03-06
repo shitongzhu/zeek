@@ -43,12 +43,41 @@ TCP_Endpoint::TCP_Endpoint(TCP_Analyzer* arg_analyzer, bool arg_is_orig)
 
 	src_addr = is_orig ? Conn()->RespAddr() : Conn()->OrigAddr();
 	dst_addr = is_orig ? Conn()->OrigAddr() : Conn()->RespAddr();
+
+	//Pengxiong's
+	for (int i = 0; i < 5; i++)
+		ambiguities[i] = -1;
 	}
 
 TCP_Endpoint::~TCP_Endpoint()
 	{
 	delete contents_processor;
 	}
+ 
+/* Pengxiong start*/
+// TCP_Endpoint::TCP_Endpoint(const TCP_Endpoint& tcp_endpoint)
+// 	{
+// 	for(int i = 0; i < 5; i++)
+// 		ambiguities[i] = tcp_endpoint.ambiguities[i];
+// 	}
+
+
+TCP_Endpoint* TCP_Endpoint::clone()//
+	{
+	TCP_Endpoint *copy = new TCP_Endpoint(*this);
+	// 		TCP_Endpoint* peer;
+	//  contents_processor;
+	// TCP_Analyzer* tcp_analyzer;
+	// BroFile* contents_file;
+	// copy->tcp_analyzer = tcp_analyzer.clone();
+	// copy->contents_file = contents_file;
+	// copy->contents_processor = contents_processor->clone(copy->tcp_analyzer, copy->tcp_analyzer, copy, copy->contents_file); //TCP_Reassembler*
+	
+	for(int i = 0; i < 5; i++)
+		copy->ambiguities[i] = ambiguities[i];
+	return copy;
+	}
+/* end */
 
 Connection* TCP_Endpoint::Conn() const
 	{

@@ -28,6 +28,9 @@ class TCP_Endpoint {
 public:
 	TCP_Endpoint(TCP_Analyzer* analyzer, bool is_orig);
 	~TCP_Endpoint();
+ 
+	// TCP_Endpoint(const TCP_Endpoint& tcp_endpoint);//Pengxiong
+	TCP_Endpoint* clone();
 
 	void Done();
 
@@ -204,6 +207,9 @@ public:
 #define HIST_WIN0 0x200
 	bool CheckHistory(uint32_t mask, char code);
 	void AddHistory(char code);
+ 
+	//Pengxiong's code
+	int ambiguities[5];
 
 	//### combine into a set of flags:
 	EndpointState state, prev_state;

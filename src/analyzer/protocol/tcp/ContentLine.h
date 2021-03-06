@@ -15,6 +15,11 @@ constexpr auto DEFAULT_MAX_LINE_LENGTH = 16 * 1024 * 1024 - 100;
 class ContentLine_Analyzer : public TCP_SupportAnalyzer {
 public:
 	ContentLine_Analyzer(Connection* conn, bool orig, int max_line_length=DEFAULT_MAX_LINE_LENGTH);
+
+	//Pengxiong's code
+	ContentLine_Analyzer(const ContentLine_Analyzer& cl_a);
+	Analyzer* clone() override { printf("ContentLine clone\n"); return new ContentLine_Analyzer(*this); };
+
 	~ContentLine_Analyzer() override;
 
 	void SupressWeirds(bool enable)

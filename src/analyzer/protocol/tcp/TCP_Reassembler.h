@@ -21,6 +21,8 @@ public:
 	TCP_Reassembler(analyzer::Analyzer* arg_dst_analyzer,
 	                TCP_Analyzer* arg_tcp_analyzer,
 	                Type arg_type, TCP_Endpoint* arg_endp);
+ 
+	TCP_Reassembler* clone(Analyzer* arg_dst_analyzer, TCP_Analyzer* arg_tcp_analyzer, TCP_Endpoint* arg_endp, FilePtr f);
 
 	void Done();
 

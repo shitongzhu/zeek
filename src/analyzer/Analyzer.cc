@@ -125,6 +125,79 @@ void Analyzer::CtorInit(const Tag& arg_tag, Connection* arg_conn)
 	signature = nullptr;
 	output_handler = nullptr;
 	}
+ 
+//Pengxiong's code
+Analyzer::Analyzer(const Analyzer& analyzer)
+	{
+	printf("Analyzer(const Analyzer& analyzer)\n");
+	conn = analyzer.conn;
+	tag = analyzer.tag;
+	id = ++id_counter;//TODO:?
+	protocol_confirmed = analyzer.protocol_confirmed;
+	timers_canceled = analyzer.timers_canceled;
+	skip = analyzer.skip;
+	finished = analyzer.finished;
+	removing = analyzer.removing;
+
+	//Pointers
+	parent = analyzer.parent;
+	signature = analyzer.signature;
+	output_handler = analyzer.output_handler;	
+	orig_supporters = resp_supporters = nullptr;
+	children.clear();
+	new_children.clear();
+
+	printf("clone analyzer.orig_supporters\n");
+	for ( SupportAnalyzer* a = analyzer.orig_supporters; a; a = a->sibling ){
+		printf("clone: %s\n", a->GetAnalyzerName());
+		AddSupportAnalyzer(static_cast<SupportAnalyzer*>(a->clone()));
+		printf("\n");
+	}
+	
+	printf("clone analyzer.resp_supporters\n");
+	for ( SupportAnalyzer* a = analyzer.resp_supporters; a; a = a->sibling ){
+		printf("clone: %s\n", a->GetAnalyzerName());
+		AddSupportAnalyzer(static_cast<SupportAnalyzer*>(a->clone()));
+		printf("\n");
+	}
+
+	printf("clone analyzer.children\n");
+	LOOP_OVER_GIVEN_CONST_CHILDREN(i, analyzer.children)		
+		{
+		if(*i)
+			{
+			printf("clone: %s\n", (*i)->GetAnalyzerName());
+			Analyzer* copy = (*i)->clone();
+			printf("\n");
+			copy->parent = this;
+			children.push_back(copy);
+			}
+		}
+
+	printf("clone analyzer.new_children\n");
+	LOOP_OVER_GIVEN_CONST_CHILDREN(i, analyzer.new_children)
+		{
+		if(*i)
+			{
+			printf("clone: %s\n", (*i)->GetAnalyzerName());
+			Analyzer* copy = (*i)->clone();
+			copy->parent = this;
+			new_children.push_back(copy);
+			printf("\n");
+			}
+		}
+	}
+
+SupportAnalyzer* Analyzer::FindSupportAnalyzer(const char* name, bool orig)
+	{
+	SupportAnalyzer* s = orig ? orig_supporters : resp_supporters;
+	for ( ; s; s = s->sibling )
+		if ( s->IsAnalyzer(name) )
+			return s;
+
+	return nullptr;
+	}
+
 
 Analyzer::~Analyzer()
 	{

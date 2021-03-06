@@ -116,6 +116,11 @@ public:
 	 * @param conn The connection the analyzer is associated with.
 	 */
 	explicit Analyzer(Connection* conn);
+ 
+	//Pengxiong's code
+	Analyzer(const Analyzer& analyzer);
+	virtual Analyzer* clone() { printf("Analyzer clone\n"); return new Analyzer(*this); };
+	SupportAnalyzer* FindSupportAnalyzer(const char* name, bool orig);
 
 	/**
 	 * Destructor.
@@ -809,6 +814,11 @@ public:
 	 */
 	SupportAnalyzer(const char* name, Connection* conn, bool arg_orig)
 		: Analyzer(name, conn)	{ orig = arg_orig; sibling = nullptr; }
+ 
+	// Pengxiong's code
+	SupportAnalyzer(const SupportAnalyzer& sa)
+		: Analyzer(sa) 			{ orig = sa.orig; sibling = nullptr;}
+
 
 	/**
 	 * Destructor.
@@ -892,6 +902,11 @@ public:
 	 */
 	TransportLayerAnalyzer(const char* name, Connection* conn)
 		: Analyzer(name, conn)	{ pia = nullptr; }
+ 
+	//Pengxiong's code
+	TransportLayerAnalyzer(const TransportLayerAnalyzer& tla)
+		: Analyzer(tla) 		{ pia = tla.pia; }
+
 
 	/**
 	 * Overridden from parent class.

@@ -152,6 +152,10 @@ protected:
 class HTTP_Analyzer final : public analyzer::tcp::TCP_ApplicationAnalyzer {
 public:
 	HTTP_Analyzer(Connection* conn);
+ 
+	//Pengxiong
+	HTTP_Analyzer(const HTTP_Analyzer& http_analyzer);
+	Analyzer* clone() override { printf("HTTP_Analyzer Clone\n"); return new HTTP_Analyzer(*this); };
 
 	void HTTP_Header(bool is_orig, analyzer::mime::MIME_Header* h);
 	void HTTP_EntityData(bool is_orig, String* entity_data);
