@@ -127,77 +127,83 @@ void Analyzer::CtorInit(const Tag& arg_tag, Connection* arg_conn)
 	}
  
 //Pengxiong's code
-Analyzer::Analyzer(const Analyzer& analyzer)
+Analyzer::Analyzer(Analyzer* a)
 	{
-	printf("Analyzer(const Analyzer& analyzer)\n");
-	conn = analyzer.conn;
-	tag = analyzer.tag;
+	printf("Analyzer copy ctor\n");
+	tag = a->tag;
 	id = ++id_counter;//TODO:?
-	protocol_confirmed = analyzer.protocol_confirmed;
-	timers_canceled = analyzer.timers_canceled;
-	skip = analyzer.skip;
-	finished = analyzer.finished;
-	removing = analyzer.removing;
 
-	//Pointers
-	parent = analyzer.parent;
-	signature = analyzer.signature;
-	output_handler = analyzer.output_handler;	
-	orig_supporters = resp_supporters = nullptr;
-	children.clear();
-	new_children.clear();
+	DBG_LOG(DBG_ANALYZER, "%s cloned from %s",
+			fmt_analyzer(this).c_str(), fmt_analyzer(a).c_str());
 
-	printf("clone analyzer.orig_supporters\n");
-	for ( SupportAnalyzer* a = analyzer.orig_supporters; a; a = a->sibling ){
-		printf("clone: %s\n", a->GetAnalyzerName());
-		AddSupportAnalyzer(static_cast<SupportAnalyzer*>(a->clone()));
-		printf("\n");
-	}
+	conn = a->conn;
+	parent = a->parent;
+	signature = a->signature;
+	output_handler = a->output_handler;
+
+	//children.clear();
+	printf("clone children\n");
+	LOOP_OVER_GIVEN_CONST_CHILDREN(i, a->children)
+		{
+		printf("clone: %s\n", (*i)->GetAnalyzerName());
+		Analyzer* copy = (*i)->Clone();
+		copy->SetParent(this);
+		children.push_back(copy);
+		}
+
+	SupportAnalyzer* prev;
+
+	orig_supporters = nullptr;
+	resp_supporters = nullptr;
+
+	/*
+	printf("clone orig_supporters\n");
+	prev = nullptr;
+	for ( SupportAnalyzer* sa = a->orig_supporters; sa; sa = sa->sibling )
+		{
+		printf("clone: %s\n", sa->GetAnalyzerName());
+		SupportAnalyzer* copy = static_cast<SupportAnalyzer*>(sa->Clone());
+		copy->SetParent(this);
+		if ( prev )
+			prev->sibling = copy;
+		else
+			orig_supporters = copy;
+		prev = copy;
+		}
 	
-	printf("clone analyzer.resp_supporters\n");
-	for ( SupportAnalyzer* a = analyzer.resp_supporters; a; a = a->sibling ){
-		printf("clone: %s\n", a->GetAnalyzerName());
-		AddSupportAnalyzer(static_cast<SupportAnalyzer*>(a->clone()));
-		printf("\n");
-	}
-
-	printf("clone analyzer.children\n");
-	LOOP_OVER_GIVEN_CONST_CHILDREN(i, analyzer.children)		
+	printf("clone resp_supporters\n");
+	prev = nullptr;
+	for ( SupportAnalyzer* sa = a->resp_supporters; sa; sa = sa->sibling )
 		{
-		if(*i)
-			{
-			printf("clone: %s\n", (*i)->GetAnalyzerName());
-			Analyzer* copy = (*i)->clone();
-			printf("\n");
-			copy->parent = this;
-			children.push_back(copy);
-			}
+		printf("clone: %s\n", sa->GetAnalyzerName());
+		SupportAnalyzer* copy = static_cast<SupportAnalyzer*>(sa->Clone());
+		copy->SetParent(this);
+		if ( prev )
+			prev->sibling = copy;
+		else
+			resp_supporters = copy;
+		prev = copy;
+		}
+	*/
+
+	//new_children.clear();
+	printf("clone new_children\n");
+	LOOP_OVER_GIVEN_CONST_CHILDREN(i, a->new_children)
+		{
+		printf("clone: %s\n", (*i)->GetAnalyzerName());
+		Analyzer* copy = (*i)->Clone();
+		copy->SetParent(this);
+		new_children.push_back(copy);
 		}
 
-	printf("clone analyzer.new_children\n");
-	LOOP_OVER_GIVEN_CONST_CHILDREN(i, analyzer.new_children)
-		{
-		if(*i)
-			{
-			printf("clone: %s\n", (*i)->GetAnalyzerName());
-			Analyzer* copy = (*i)->clone();
-			copy->parent = this;
-			new_children.push_back(copy);
-			printf("\n");
-			}
-		}
+	protocol_confirmed = a->protocol_confirmed;
+
+	//TODO: clone timers?
+	timers_canceled = a->timers_canceled;
+	skip = a->skip;
+	finished = a->finished;
+	removing = a->removing;
 	}
-
-SupportAnalyzer* Analyzer::FindSupportAnalyzer(const char* name, bool orig)
-	{
-	SupportAnalyzer* s = orig ? orig_supporters : resp_supporters;
-	for ( ; s; s = s->sibling )
-		if ( s->IsAnalyzer(name) )
-			return s;
-
-	return nullptr;
-	}
-
 
 Analyzer::~Analyzer()
 	{
@@ -912,6 +918,42 @@ void Analyzer::EnqueueConnEvent(EventHandlerPtr f, Args args)
 void Analyzer::Weird(const char* name, const char* addl)
 	{
 	conn->Weird(name, addl, GetAnalyzerName());
+	}
+
+void Analyzer::DumpAnalyzerTree(int level) const
+	{
+	// dump analyzer tree recursively
+	printf("%*s", level * 4, "");
+	printf("+ %s\n", fmt_analyzer(this).c_str());
+	printf("%*s", (level + 1) * 4, "");
+	printf("Children:\n");
+	for (auto child : children)
+		{
+		child->DumpAnalyzerTree(level + 1);
+		}
+
+	printf("%*s", (level + 1) * 4, "");
+	printf("New Children:\n");
+	for (auto new_child : new_children)
+		{
+		new_child->DumpAnalyzerTree(level + 1);
+		}
+
+	printf("%*s", (level + 1) * 4, "");
+	printf("Orig Support Analyzers:\n");
+	for (auto sa = orig_supporters; sa; sa = sa->sibling)
+		{
+		printf("%*s", (level + 2) * 4, "");
+		printf("* %s\n", fmt_analyzer(sa).c_str());
+		}
+
+	printf("%*s", (level + 1) * 4, "");
+	printf("Resp Support Analyzers:\n");
+	for (auto sa = resp_supporters; sa; sa = sa->sibling)
+		{
+		printf("%*s", (level + 2) * 4, "");
+		printf("* %s\n", fmt_analyzer(sa).c_str());
+		}
 	}
 
 SupportAnalyzer* SupportAnalyzer::Sibling(bool only_active) const

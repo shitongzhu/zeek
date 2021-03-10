@@ -20,30 +20,36 @@ ContentLine_Analyzer::ContentLine_Analyzer(const char* name, Connection* conn, b
 	}
 
 //Pengxiong's code
-ContentLine_Analyzer::ContentLine_Analyzer(const ContentLine_Analyzer& contentline_analyzer)
-: TCP_SupportAnalyzer(contentline_analyzer)
+ContentLine_Analyzer::ContentLine_Analyzer(ContentLine_Analyzer* cla)
+: TCP_SupportAnalyzer(cla)
 	{
-	printf("ContentLine_Analyzer(const ContentLine_Analyzer&)\n");
-	buf = 0;
-	offset = 0;
-	buf_len = 0;
-	InitBuffer(contentline_analyzer.buf_len);
-	memcpy(buf, contentline_analyzer.buf, contentline_analyzer.buf_len);
-	offset = contentline_analyzer.offset;
-	last_char = contentline_analyzer.last_char;
-	max_line_length = contentline_analyzer.max_line_length;
+	printf("ContentLine_Analyzer copy ctor\n");
+	buf = new u_char[cla->buf_len];
+	memcpy(buf, cla->buf, cla->buf_len);
+	offset = cla->offset;
+	buf_len = cla->buf_len;
+	last_char = cla->last_char;
+	max_line_length = cla->max_line_length;
 
-	seq = contentline_analyzer.seq;
-	seq_to_skip = contentline_analyzer.seq_to_skip;
-	seq_delivered_in_lines = contentline_analyzer.seq_delivered_in_lines;
-	skip_pending = contentline_analyzer.skip_pending;
-	plain_delivery_length = contentline_analyzer.plain_delivery_length;
-	is_plain = contentline_analyzer.is_plain;
-	skip_deliveries = contentline_analyzer.skip_deliveries;
-	suppress_weirds = contentline_analyzer.suppress_weirds;
-	flag_NULs = contentline_analyzer.flag_NULs;
-	CR_LF_as_EOL = contentline_analyzer.CR_LF_as_EOL;
-	skip_partial = contentline_analyzer.skip_partial;
+	seq = cla->seq;
+	seq_to_skip = cla->seq_to_skip;
+
+	seq_delivered_in_lines = cla->seq_delivered_in_lines;
+	
+	skip_pending = cla->skip_pending;
+
+	plain_delivery_length = cla->plain_delivery_length;
+	is_plain = cla->is_plain;
+
+	skip_deliveries = cla->skip_deliveries;
+
+	suppress_weirds = cla->suppress_weirds;
+
+	flag_NULs = cla->flag_NULs;
+
+	CR_LF_as_EOL = cla->CR_LF_as_EOL;
+
+	skip_partial = cla->skip_partial;
 	}
 
 void ContentLine_Analyzer::InitState()

@@ -2,10 +2,6 @@
 
 #pragma once
 
-//#include <unistd.h>
-//#include <sys/types.h>
-//#include <sys/wait.h>
-
 #include "zeek/analyzer/Analyzer.h"
 #include "zeek/IPAddr.h"
 #include "zeek/analyzer/protocol/tcp/TCP_Endpoint.h"
@@ -31,21 +27,22 @@ public:
 	~TCP_Analyzer() override;
  
 	//Pengxiong's code
-	TCP_Analyzer(const TCP_Analyzer& tcp_analyzer);
-	Analyzer* clone() override { printf("TCP_Analyzer clone\n"); return new TCP_Analyzer(*this); };
+	TCP_Analyzer(TCP_Analyzer* tcp);
 
-	void EnableReassembly();
+	Analyzer* Clone() override { return new TCP_Analyzer(this); }
+
+	virtual void EnableReassembly();
 
 	// Add a child analyzer that will always get the packets,
 	// independently of whether we do any reassembly.
-	void AddChildPacketAnalyzer(analyzer::Analyzer* a);
+	virtual void AddChildPacketAnalyzer(analyzer::Analyzer* a);
 
 	Analyzer* FindChild(analyzer::ID id) override;
 	Analyzer* FindChild(analyzer::Tag tag) override;
 	bool RemoveChildAnalyzer(analyzer::ID id) override;
 
 	// True if the connection has closed in some sense, false otherwise.
-	bool IsClosed() const	{ return orig->did_close || resp->did_close; }
+	virtual bool IsClosed() const	{ return orig->did_close || resp->did_close; }
 	bool BothClosed() const	{ return orig->did_close && resp->did_close; }
 
 	bool IsPartial() const	{ return is_partial; }
@@ -66,7 +63,7 @@ public:
 	// which we have seen a FIN) - for it, data is pending unless
 	// everything's been delivered up to the FIN.  For its peer,
 	// the test is whether it has any outstanding, un-acked data.
-	bool DataPending(TCP_Endpoint* closing_endp);
+	virtual bool DataPending(TCP_Endpoint* closing_endp);
 
 	void SetContentsFile(unsigned int direction, FilePtr f) override;
 	FilePtr GetContentsFile(unsigned int direction) const override;
@@ -74,12 +71,16 @@ public:
 	// From Analyzer.h
 	void UpdateConnVal(RecordVal *conn_val) override;
 
-	int ParseTCPOptions(const struct tcphdr* tcp, bool is_orig);
+	virtual int ParseTCPOptions(const struct tcphdr* tcp, bool is_orig);
 
 	static analyzer::Analyzer* Instantiate(Connection* conn)
 		{ return new TCP_Analyzer(conn); }
 
+	// wzj
+	void DumpAnalyzerTree(int level = 0) const override;
+
 protected:
+	friend class TCP_FatherAnalyzer;
 	friend class TCP_ApplicationAnalyzer;
 	friend class TCP_Reassembler;
 	friend class analyzer::pia::PIA_TCP;
@@ -95,13 +96,9 @@ protected:
 	bool IsReuse(double t, const u_char* pkt) override;
  
 	//Pengxiong's code
-	void DeliverPacketPerFork(int len, const u_char* data, bool is_orig,
-	                          uint64_t seq, const IP_Hdr* ip, int caplen, 
-	                          TCP_Endpoint* orig, const struct tcphdr* tp);
-	int find_ambiguity(int len, const u_char* data, bool is_orig,
-	                   uint64_t seq, const IP_Hdr* ip, int caplen, const struct tcphdr* tp);
-	void execute_ambiguity_action(int action);	
 	bool ValidateMD5Option(const struct tcphdr* tcp);
+
+	bool CheckAmbiguity(const u_char* data, int len, int caplen);
 
 	// Returns the TCP header pointed to by data (which we assume is
 	// aligned), updating data, len & caplen.  Returns nil if the header
@@ -189,11 +186,6 @@ private:
 
 	TCP_Endpoint* orig;
 	TCP_Endpoint* resp;
- 
-	//Pengxiong
-	using tcp_endpoint_list = std::list<analyzer::tcp::TCP_Endpoint*>;
-	tcp_endpoint_list orig_forks, resp_forks;
-	//TODO: list of forked ambuities  
 
 	using analyzer_list = std::list<analyzer::Analyzer*>;
 	analyzer_list packet_children;
@@ -213,6 +205,10 @@ private:
 
 	// Whether we have seen the first ACK from the originator.
 	unsigned int seen_first_ACK: 1;
+
+	// wzj
+	std::vector<int> curr_pkt_ambiguities;
+	std::vector<int> ambiguity_behavior;
 };
 
 class TCP_ApplicationAnalyzer : public analyzer::Analyzer {
@@ -222,15 +218,17 @@ public:
 
 	explicit TCP_ApplicationAnalyzer(Connection* conn)
 		: Analyzer(conn), tcp(nullptr) { }
- 
-	TCP_ApplicationAnalyzer(const TCP_ApplicationAnalyzer& tcp_aa)
-		: Analyzer(tcp_aa) 
-		{ 
-			printf("TCP_ApplicationAnalyzer(const TCP_ApplicationAnalyzer&)\n"); 
-			tcp = tcp_aa.tcp; 
-		}
 
 	~TCP_ApplicationAnalyzer() override { }
+ 
+	TCP_ApplicationAnalyzer(TCP_ApplicationAnalyzer* taa)
+		: Analyzer(taa) 
+		{ 
+			printf("TCP_ApplicationAnalyzer copy ctor\n"); 
+			tcp = nullptr; 
+		}
+
+	Analyzer* Clone() override { return new TCP_ApplicationAnalyzer(this); }
 
 	// This may be nil if we are not directly associated with a TCP
 	// analyzer (e.g., we're part of a tunnel decapsulation pipeline).
@@ -280,14 +278,16 @@ class TCP_SupportAnalyzer : public analyzer::SupportAnalyzer {
 public:
 	TCP_SupportAnalyzer(const char* name, Connection* conn, bool arg_orig)
 		: analyzer::SupportAnalyzer(name, conn, arg_orig)	{ }
- 
-	TCP_SupportAnalyzer(const TCP_SupportAnalyzer& tcp_sa)
-		: analyzer::SupportAnalyzer(tcp_sa) 
-		{ 
-			printf("TCP_SupportAnalyzer(const TCP_SupportAnalyzer&)\n"); 
-		}
 
 	~TCP_SupportAnalyzer() override {}
+ 
+	TCP_SupportAnalyzer(TCP_SupportAnalyzer* tsa)
+		: analyzer::SupportAnalyzer(tsa)
+		{ 
+			printf("TCP_SupportAnalyzer copy ctor\n"); 
+		}
+
+	Analyzer* Clone() override { return new TCP_SupportAnalyzer(this); }
 
 	// These are passed on from TCP_Analyzer.
 	virtual void EndpointEOF(bool is_orig)	{ }

@@ -118,9 +118,9 @@ public:
 	explicit Analyzer(Connection* conn);
  
 	//Pengxiong's code
-	Analyzer(const Analyzer& analyzer);
-	virtual Analyzer* clone() { printf("Analyzer clone\n"); return new Analyzer(*this); };
-	SupportAnalyzer* FindSupportAnalyzer(const char* name, bool orig);
+	Analyzer(Analyzer* analyzer);
+
+	virtual Analyzer* Clone() { return new Analyzer(this); }
 
 	/**
 	 * Destructor.
@@ -160,7 +160,7 @@ public:
 	 *
 	 * @param caplen The packet's capture length, if available.
 	 */
-	void NextPacket(int len, const u_char* data, bool is_orig,
+	virtual void NextPacket(int len, const u_char* data, bool is_orig,
 			uint64_t seq = -1, const IP_Hdr* ip = nullptr, int caplen = 0);
 
 	/**
@@ -178,7 +178,7 @@ public:
 	 *
 	 * @param is_orig True if this is originator-side input.
 	 */
-	void NextStream(int len, const u_char* data, bool is_orig);
+	virtual void NextStream(int len, const u_char* data, bool is_orig);
 
 	/**
 	 * Informs the analyzer about a gap in the TCP stream, i.e., data
@@ -191,7 +191,7 @@ public:
 	 *
 	 * @param is_orig True if this is about originator-side input.
 	 */
-	void NextUndelivered(uint64_t seq, int len, bool is_orig);
+	virtual void NextUndelivered(uint64_t seq, int len, bool is_orig);
 
 	/**
 	 * Reports a message boundary.  This is a generic method that can be
@@ -203,7 +203,7 @@ public:
 	 *
 	 * @param is_orig True if this is about originator-side input.
 	 */
-	void NextEndOfData(bool is_orig);
+	virtual void NextEndOfData(bool is_orig);
 
 	/**
 	 * Forwards packet input on to all child analyzers. If the analyzer
@@ -323,24 +323,24 @@ public:
 	 *
 	 * @param do_skip If true, further processing will be skipped.
 	 */
-	void SetSkip(bool do_skip)		{ skip = do_skip; }
+	virtual void SetSkip(bool do_skip)		{ skip = do_skip; }
 
 	/**
 	 * Returns true if the analyzer has been told to skip processing all
 	 * further input.
 	 */
-	bool Skipping() const			{ return skip; }
+	virtual bool Skipping() const			{ return skip; }
 
 	/**
 	 * Returns true if Done() has been called.
 	 */
-	bool IsFinished() const 		{ return finished; }
+	virtual bool IsFinished() const 		{ return finished; }
 
 	/**
 	 * Returns true if the analyzer has been flagged for removal and
 	 * shouldn't be used anymore.
 	 */
-	bool Removing() const	{ return removing; }
+	virtual bool Removing() const	{ return removing; }
 
 	/**
 	 * Returns the tag associated with the analyzer's type.
@@ -427,7 +427,7 @@ public:
 	 *
 	 * @param tag The type of analyzer to check for.
 	 */
-	bool HasChildAnalyzer(Tag tag);
+	virtual bool HasChildAnalyzer(Tag tag);
 
 	/**
 	 * Recursively searches all (direct or indirect) childs of the
@@ -470,7 +470,7 @@ public:
 	 * currently queued up to be added. If you just added an analyzer,
 	 * it will not immediately be in this list.
 	 */
-	const analyzer_list& GetChildren()	{ return children; }
+	virtual const analyzer_list& GetChildren()	{ return children; }
 
 	/**
 	 * Returns a pointer to the parent analyzer, or null if this instance
@@ -498,7 +498,7 @@ public:
 	 *
 	 * @param analyzer The support analyzer to add.
 	 */
-	void AddSupportAnalyzer(SupportAnalyzer* analyzer);
+	virtual void AddSupportAnalyzer(SupportAnalyzer* analyzer);
 
 	/**
 	 * Remove a support analyzer.
@@ -506,7 +506,7 @@ public:
 	 * @param analyzer The analyzer to remove. The function is a no-op if
 	 * that analyzer is not part of the list of support analyzer.
 	 */
-	void RemoveSupportAnalyzer(SupportAnalyzer* analyzer);
+	virtual void RemoveSupportAnalyzer(SupportAnalyzer* analyzer);
 
 	/**
 	 * Signals Bro's protocol detection that the analyzer has recognized
@@ -562,13 +562,13 @@ public:
 	 * Connection::BuildConnVal().
 	 */
 	[[deprecated("Remove in v4.1.  Use ConnVal() instead.")]]
-	RecordVal* BuildConnVal();
+	virtual RecordVal* BuildConnVal();
 
 	/**
 	 * Convenience function that forwards directly to
 	 * Connection::ConnVal().
 	 */
-	const RecordValPtr& ConnVal();
+	virtual const RecordValPtr& ConnVal();
 
 	/**
 	 * Convenience function that forwards directly to the corresponding
@@ -631,6 +631,9 @@ public:
 	 */
 	virtual unsigned int MemoryAllocation() const;
 
+	// wzj
+	virtual void DumpAnalyzerTree(int level = 0) const;
+
 protected:
 	friend class AnalyzerTimer;
 	friend class Manager;
@@ -665,19 +668,19 @@ protected:
 	 *
 	 * @param type The timer's type.
 	 */
-	void AddTimer(analyzer_timer_func timer, double t, bool do_expire,
+	virtual void AddTimer(analyzer_timer_func timer, double t, bool do_expire,
 	              detail::TimerType type);
 
 	/**
 	 * Cancels all timers added previously via AddTimer().
 	 */
-	void CancelTimers();
+	virtual void CancelTimers();
 
 	/**
 	 * Removes a given timer. This is an internal method and shouldn't be
 	 * used by derived class. It does not cancel the timer.
 	 */
-	void RemoveTimer(detail::Timer* t);
+	virtual void RemoveTimer(detail::Timer* t);
 
 	/**
 	 * Returns true if the analyzer has associated an SupportAnalyzer of a given type.
@@ -686,7 +689,7 @@ protected:
 	 *
 	 * @param orig True if asking about the originator side.
 	 */
-	bool HasSupportAnalyzer(const Tag& tag, bool orig);
+	virtual bool HasSupportAnalyzer(const Tag& tag, bool orig);
 
 	/**
 	 * Returns the first still active support analyzer for the given
@@ -694,7 +697,7 @@ protected:
 	 *
 	 * @param orig True if asking about the originator side.
 	 */
-	SupportAnalyzer* FirstSupportAnalyzer(bool orig);
+	virtual SupportAnalyzer* FirstSupportAnalyzer(bool orig);
 
 	/**
 	 * Adds a a new child analyzer with the option whether to intialize
@@ -705,28 +708,28 @@ protected:
 	 * @param init If true, Init() will be calle.d
 	 * @return false if analyzer type was already a child, else true.
 	 */
-	bool AddChildAnalyzer(Analyzer* analyzer, bool init);
+	virtual bool AddChildAnalyzer(Analyzer* analyzer, bool init);
 
 	/**
 	 * Inits all child analyzers. This is an internal method.
 	 */
-	void InitChildren();
+	virtual void InitChildren();
 
 	/**
 	 * Reorganizes the child data structure. This is an internal method.
 	 */
-	void AppendNewChildren();
+	virtual void AppendNewChildren();
 
 	/**
 	 * Returns true if the child analyzer is now scheduled to be
 	 * removed (and was not before)
 	 */
-	bool RemoveChild(const analyzer_list& children, ID id);
+	virtual bool RemoveChild(const analyzer_list& children, ID id);
 
 private:
 	// Internal method to eventually delete a child analyzer that's
 	// already Done().
-	void DeleteChild(analyzer_list::iterator i);
+	virtual void DeleteChild(analyzer_list::iterator i);
 
 	// Helper for the ctors.
 	void CtorInit(const Tag& tag, Connection* conn);
@@ -816,9 +819,10 @@ public:
 		: Analyzer(name, conn)	{ orig = arg_orig; sibling = nullptr; }
  
 	// Pengxiong's code
-	SupportAnalyzer(const SupportAnalyzer& sa)
-		: Analyzer(sa) 			{ orig = sa.orig; sibling = nullptr;}
+	SupportAnalyzer(SupportAnalyzer* sa)
+		: Analyzer(sa) 			{ orig = sa->orig; sibling = nullptr; }
 
+	Analyzer* Clone() override { return new SupportAnalyzer(this); }
 
 	/**
 	 * Destructor.
@@ -904,9 +908,8 @@ public:
 		: Analyzer(name, conn)	{ pia = nullptr; }
  
 	//Pengxiong's code
-	TransportLayerAnalyzer(const TransportLayerAnalyzer& tla)
-		: Analyzer(tla) 		{ pia = tla.pia; }
-
+	TransportLayerAnalyzer(TransportLayerAnalyzer* tla)
+		: Analyzer(tla) 		{ pia = nullptr; }
 
 	/**
 	 * Overridden from parent class.
@@ -950,13 +953,13 @@ public:
 	 * transport-layer input and determine which protocol analyzer(s) to
 	 * use for parsing it.
 	 */
-	void SetPIA(analyzer::pia::PIA* arg_PIA)	{ pia = arg_PIA; }
+	virtual void SetPIA(analyzer::pia::PIA* arg_PIA)	{ pia = arg_PIA; }
 
 	/**
 	 * Returns the associated PIA, or null of none. Does not take
 	 * ownership.
 	 */
-	analyzer::pia::PIA* GetPIA() const		{ return pia; }
+	virtual analyzer::pia::PIA* GetPIA() const		{ return pia; }
 
 	/**
 	 * Helper to raise a \c packet_contents event.

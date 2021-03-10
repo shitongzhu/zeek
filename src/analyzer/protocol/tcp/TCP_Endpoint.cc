@@ -43,41 +43,61 @@ TCP_Endpoint::TCP_Endpoint(TCP_Analyzer* arg_analyzer, bool arg_is_orig)
 
 	src_addr = is_orig ? Conn()->RespAddr() : Conn()->OrigAddr();
 	dst_addr = is_orig ? Conn()->OrigAddr() : Conn()->RespAddr();
+	}
 
-	//Pengxiong's
-	for (int i = 0; i < 5; i++)
-		ambiguities[i] = -1;
+TCP_Endpoint::TCP_Endpoint(TCP_Endpoint* te, TCP_Analyzer* ta)
+	{
+	printf("TCP_Endpoint copy ctor\n");
+	state = te->state;
+	prev_state = te->prev_state;
+	peer = nullptr;
+
+	tcp_analyzer = ta;
+
+	assert(te->contents_file == nullptr);
+	contents_file = nullptr;
+
+	contents_processor = new TCP_Reassembler(te->contents_processor, ta, ta, this, contents_file);
+	
+	start_time = te->start_time;
+	last_time = te->last_time;
+	src_addr = te->src_addr;
+	dst_addr = te->dst_addr;
+	window = te->window;
+	window_scale = te->window_scale;
+	window_ack_seq = te->window_ack_seq;
+	window_seq = te->window_seq;
+	contents_start_seq = te->contents_start_seq;
+	FIN_seq = te->FIN_seq;
+	SYN_cnt = te->SYN_cnt;
+	RST_cnt = te->RST_cnt;
+	did_close = te->did_close;
+	is_orig = te->is_orig;
+
+	hist_last_SYN = te->hist_last_SYN;
+	hist_last_FIN = te->hist_last_FIN;
+	hist_last_RST = te->hist_last_RST;
+
+	start_seq = te->start_seq;
+	last_seq = te->last_seq;
+	ack_seq = te->ack_seq;
+	seq_wraps = te->seq_wraps;
+	ack_wraps = te->ack_wraps;
+
+	chk_cnt = te->chk_cnt;
+	chk_thresh = te->chk_thresh;
+	rxmt_cnt = te->rxmt_cnt;
+	rxmt_thresh = te->rxmt_thresh;
+	win0_cnt = te->win0_cnt;
+	win0_thresh = te->win0_thresh;
+	gap_cnt = te->gap_cnt;
+	gap_thresh = te->gap_thresh;
 	}
 
 TCP_Endpoint::~TCP_Endpoint()
 	{
 	delete contents_processor;
 	}
- 
-/* Pengxiong start*/
-// TCP_Endpoint::TCP_Endpoint(const TCP_Endpoint& tcp_endpoint)
-// 	{
-// 	for(int i = 0; i < 5; i++)
-// 		ambiguities[i] = tcp_endpoint.ambiguities[i];
-// 	}
-
-
-TCP_Endpoint* TCP_Endpoint::clone()//
-	{
-	TCP_Endpoint *copy = new TCP_Endpoint(*this);
-	// 		TCP_Endpoint* peer;
-	//  contents_processor;
-	// TCP_Analyzer* tcp_analyzer;
-	// BroFile* contents_file;
-	// copy->tcp_analyzer = tcp_analyzer.clone();
-	// copy->contents_file = contents_file;
-	// copy->contents_processor = contents_processor->clone(copy->tcp_analyzer, copy->tcp_analyzer, copy, copy->contents_file); //TCP_Reassembler*
-	
-	for(int i = 0; i < 5; i++)
-		copy->ambiguities[i] = ambiguities[i];
-	return copy;
-	}
-/* end */
 
 Connection* TCP_Endpoint::Conn() const
 	{

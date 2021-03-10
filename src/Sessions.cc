@@ -396,12 +396,12 @@ void NetSessions::Remove(Connection* c)
 
 		if ( c->ConnTransport() == TRANSPORT_TCP )
 			{
-			auto ta = static_cast<analyzer::tcp::TCP_Analyzer*>(c->GetRootAnalyzer());
-			assert(ta->IsAnalyzer("TCP"));
-			analyzer::tcp::TCP_Endpoint* to = ta->Orig();
-			analyzer::tcp::TCP_Endpoint* tr = ta->Resp();
+			//auto ta = static_cast<analyzer::tcp::TCP_Analyzer*>(c->GetRootAnalyzer());
+			//assert(ta->IsAnalyzer("TCP"));
+			//analyzer::tcp::TCP_Endpoint* to = ta->Orig();
+			//analyzer::tcp::TCP_Endpoint* tr = ta->Resp();
 
-			tcp_stats.StateLeft(to->state, tr->state);
+			//tcp_stats.StateLeft(to->state, tr->state);
 			}
 
 		c->Done();

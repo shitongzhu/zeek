@@ -12,6 +12,7 @@
 #include "zeek/analyzer/protocol/pia/PIA.h"
 #include "zeek/analyzer/protocol/stepping-stone/SteppingStone.h"
 #include "zeek/analyzer/protocol/tcp/TCP.h"
+#include "zeek/analyzer/protocol/tcp/TCP_Father.h"
 #include "zeek/analyzer/protocol/udp/UDP.h"
 
 #include "zeek/plugin/Manager.h"
@@ -361,7 +362,8 @@ Manager::tag_set* Manager::LookupPort(PortVal* val, bool add_if_not_found)
 
 bool Manager::BuildInitialAnalyzerTree(Connection* conn)
 	{
-	analyzer::tcp::TCP_Analyzer* tcp = nullptr;
+	//analyzer::tcp::TCP_Analyzer* tcp = nullptr;
+	analyzer::tcp::TCP_FatherAnalyzer* tcp = nullptr;
 	TransportLayerAnalyzer* root = nullptr;
 	analyzer::pia::PIA* pia = nullptr;
 	bool check_port = false;
@@ -369,7 +371,8 @@ bool Manager::BuildInitialAnalyzerTree(Connection* conn)
 	switch ( conn->ConnTransport() ) {
 
 	case TRANSPORT_TCP:
-		root = tcp = new analyzer::tcp::TCP_Analyzer(conn);
+		//root = tcp = new analyzer::tcp::TCP_Analyzer(conn);
+		root = tcp = new analyzer::tcp::TCP_FatherAnalyzer(conn);
 		pia = new analyzer::pia::PIA_TCP(conn);
 		check_port = true;
 		DBG_ANALYZER(conn, "activated TCP analyzer");

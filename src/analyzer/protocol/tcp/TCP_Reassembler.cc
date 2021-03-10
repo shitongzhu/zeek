@@ -58,29 +58,33 @@ TCP_Reassembler::TCP_Reassembler(analyzer::Analyzer* arg_dst_analyzer,
 		}
 	}
  
-TCP_Reassembler* TCP_Reassembler::clone(Analyzer* arg_dst_analyzer, TCP_Analyzer* arg_tcp_analyzer, TCP_Endpoint* arg_endp, FilePtr f)
+TCP_Reassembler::TCP_Reassembler(TCP_Reassembler* tr, 
+				 analyzer::Analyzer* arg_dst_analyzer, 
+				 TCP_Analyzer* arg_tcp_analyzer, 
+				 TCP_Endpoint* arg_endp, FilePtr f)
+: Reassembler(tr)
 	{
-	TCP_Reassembler* copy = new TCP_Reassembler(arg_dst_analyzer, arg_tcp_analyzer, type, arg_endp);
-	for ( auto it = block_list.Begin(); it != block_list.End(); ++it )
-		{
-		const auto& b = it->second;
-		copy->NewBlock(0, b.seq, b.upper-b.seq, b.block);
-		}
-	copy->deliver_tcp_contents = deliver_tcp_contents;
-	copy->had_gap = had_gap;
-	copy->did_EOF = did_EOF;
-	copy->skip_deliveries = skip_deliveries;
-	copy-> seq_to_skip = seq_to_skip;
-	copy->in_delivery = in_delivery;
-	copy->flags = flags;
-	copy->record_contents_file = f;
+	printf("TCP_Reassembler copy ctor\n");
+	endp = arg_endp;
 
-	copy->last_reassem_seq = last_reassem_seq;
-	copy->trim_seq = trim_seq;
-	copy->max_old_blocks = max_old_blocks;
+	deliver_tcp_contents = tr->deliver_tcp_contents;
+	had_gap = tr->had_gap;
+	did_EOF = tr->did_EOF;
+	skip_deliveries = tr->skip_deliveries;
 
-	//todo BroObj copy??
-	return copy;
+	seq_to_skip = tr->seq_to_skip;
+
+	in_delivery = tr->in_delivery;
+	flags = tr->flags;
+
+	record_contents_file = f;
+
+	dst_analyzer = arg_dst_analyzer;
+	tcp_analyzer = arg_tcp_analyzer;
+
+	type = tr->type;
+	
+	//TODO: clone Obj
 	}
 
 void TCP_Reassembler::Done()

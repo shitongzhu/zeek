@@ -16,11 +16,12 @@ class ContentLine_Analyzer : public TCP_SupportAnalyzer {
 public:
 	ContentLine_Analyzer(Connection* conn, bool orig, int max_line_length=DEFAULT_MAX_LINE_LENGTH);
 
-	//Pengxiong's code
-	ContentLine_Analyzer(const ContentLine_Analyzer& cl_a);
-	Analyzer* clone() override { printf("ContentLine clone\n"); return new ContentLine_Analyzer(*this); };
-
 	~ContentLine_Analyzer() override;
+
+	//Pengxiong's code
+	ContentLine_Analyzer(ContentLine_Analyzer* cla);
+
+	Analyzer* Clone() override { return new ContentLine_Analyzer(this); }
 
 	void SupressWeirds(bool enable)
 		{ suppress_weirds = enable; }

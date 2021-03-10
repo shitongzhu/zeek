@@ -273,6 +273,29 @@ Reassembler::Reassembler(uint64_t init_seq, ReassemblerType reassem_type)
 	{
 	}
 
+Reassembler::Reassembler(Reassembler* r)
+	: block_list(this), old_block_list(this)
+	{
+	printf("Reassembler copy ctor\n");
+	for ( auto it = r->block_list.Begin(); it != r->block_list.End(); ++it )
+		{
+		const auto& b = it->second;
+		block_list.Insert(b.seq, b.upper, b.block);
+		}
+	
+	for ( auto it = r->old_block_list.Begin(); it != r->old_block_list.End(); ++it )
+		{
+		const auto& b = it->second;
+		old_block_list.Insert(b.seq, b.upper, b.block);
+		}
+
+	last_reassem_seq = r->last_reassem_seq;
+	trim_seq = r->trim_seq;
+	max_old_blocks = r->max_old_blocks;
+
+	rtype = r->rtype;
+	}
+
 void Reassembler::CheckOverlap(const DataBlockList& list,
                                uint64_t seq, uint64_t len,
                                const u_char* data)

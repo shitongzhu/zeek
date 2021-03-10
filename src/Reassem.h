@@ -256,6 +256,8 @@ public:
 	Reassembler(uint64_t init_seq, ReassemblerType reassem_type = REASSEM_UNKNOWN);
 	~Reassembler() override	{}
 
+	Reassembler(Reassembler* r);
+
 	void NewBlock(double t, uint64_t seq, uint64_t len, const u_char* data);
 
 	// Throws away all blocks up to seq.  Returns number of bytes

@@ -3,6 +3,7 @@
 #include "zeek/plugin/Plugin.h"
 #include "zeek/analyzer/Component.h"
 #include "zeek/analyzer/protocol/tcp/TCP.h"
+#include "zeek/analyzer/protocol/tcp/TCP_Father.h"
 
 namespace zeek::plugin::detail::Zeek_TCP {
 
@@ -10,6 +11,7 @@ class Plugin : public zeek::plugin::Plugin {
 public:
 	zeek::plugin::Configuration Configure() override
 		{
+		AddComponent(new zeek::analyzer::Component("TCPFather", zeek::analyzer::tcp::TCP_FatherAnalyzer::Instantiate));
 		AddComponent(new zeek::analyzer::Component("TCP", zeek::analyzer::tcp::TCP_Analyzer::Instantiate));
 		AddComponent(new zeek::analyzer::Component("TCPStats", zeek::analyzer::tcp::TCPStats_Analyzer::Instantiate));
 		AddComponent(new zeek::analyzer::Component("CONTENTLINE", nullptr));
