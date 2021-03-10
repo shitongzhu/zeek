@@ -22,6 +22,7 @@ TCP_FatherAnalyzer::TCP_FatherAnalyzer(Connection *conn)
 TCP_FatherAnalyzer::~TCP_FatherAnalyzer() 
 {
     for (TCP_Analyzer *tcp_child : tcp_children) {
+        assert(tcp_child->IsFinished());
         delete tcp_child;
     }
 }
@@ -52,57 +53,29 @@ void TCP_FatherAnalyzer::NextPacket(int len, const u_char* data, bool is_orig,
     int i = 0;
     for (TCP_Analyzer *tcp_child : tcp_children) {
         if (tcp_child->CheckAmbiguity(data, len, caplen)) {
-            for (int ambiguity_id : tcp_child->curr_pkt_ambiguities) {
-                std::cout << "State " << i << ": found ambiguity: " << ambiguity_id << "\n";
-                if (tcp_child->ambiguity_behavior[ambiguity_id] == -1) {
-                    // fork
-                    std::cout << "Forking State " << i << "\n";
-                    TCP_Analyzer *new_tcp_child = Fork(tcp_child);
-                    
-                    // set ambiguity behavior
-                    // old
-                    for (int j = ambiguity_id; j < AMBI_MAX; j++) {
-                        assert(tcp_child->ambiguity_behavior[j] != 1);
-                        tcp_child->ambiguity_behavior[j] = 0;
-                    }
-                    // new
-                    for (int j = ambiguity_id; j >= 0; j--) {
-                        assert(new_tcp_child->ambiguity_behavior[j] != 0);
-                        new_tcp_child->ambiguity_behavior[j] = 1;
+            for (int ambiguity_id = 0; ambiguity_id < AMBI_MAX; ambiguity_id++) {
+                if (tcp_child->curr_pkt_ambiguities[ambiguity_id]) {
+                    std::cout << "State " << i << ": found ambiguity: " << ambiguity_id << "\n";
+                    if (tcp_child->ambiguity_behavior[ambiguity_id] == -1) {
+                        // fork
+                        std::cout << "Forking State " << i << "\n";
+                        TCP_Analyzer *new_tcp_child = Fork(tcp_child);
+                        tcp_children.push_back(new_tcp_child);
+                        
+                        // set ambiguity behavior
+                        // old
+                        for (int j = ambiguity_id; j < AMBI_MAX; j++) {
+                            assert(tcp_child->ambiguity_behavior[j] != 1);
+                            tcp_child->ambiguity_behavior[j] = 0;
+                        }
+                        // new
+                        for (int j = ambiguity_id; j >= 0; j--) {
+                            assert(new_tcp_child->ambiguity_behavior[j] != 0);
+                            new_tcp_child->ambiguity_behavior[j] = 1;
+                        }
                     }
                 }
             }
-
-            /*
-            if(orig_cur->ambiguities[ambiguity_id] == -1) //forka
-            {
-                printf("State%d: ambiguity %d hasn't been recorded\n", i, ambiguity_id);
-                TCP_Analyzer* tcp_analyzer_new = new TCP_Analyzer(*this);
-                TCP_Endpoint* orig_new = tcp_analyzer_new->orig; //TODO: add an id to distinguish forked states
-                TCP_Endpoint* resp_new = tcp_analyzer_new->resp;
-                orig_forks.push_back(orig_new);
-                resp_forks.push_back(resp_new);
-                TCP_Reassembler* tcp_reassembler_orig_new = orig_cur->contents_processor->clone(tcp_analyzer_new, tcp_analyzer_new, orig_new, orig_cur->contents_file);
-                
-                TCP_Reassembler* tcp_reassembler_resp_new = resp_cur->contents_processor->clone(tcp_analyzer_new, tcp_analyzer_new, resp_new, resp_cur->contents_file);
-                tcp_analyzer_new->SetReassembler(tcp_reassembler_orig_new, tcp_reassembler_resp_new);
-                orig_new->ambiguities[ambiguity_id] = 2;
-                orig_cur->ambiguities[ambiguity_id] = 1;
-            }
-            else
-                printf("State%d: ambiguity %d has been recorded\n", i, ambiguity_id);
-            // execute_ambiguity_action(orig->ambiguities[ambiguity_id]);
-            if(orig_cur->ambiguities[ambiguity_id] == 1)
-            {
-                printf("State%d: ambiguity %d is being ignored\n\n", i, ambiguity_id);
-                continue;  //ignore
-            }
-            else
-            {
-                printf("State%d: ambiguity %d is being accepted\n\n", i, ambiguity_id);
-            }
-            */
-
         }
         i++;
     }
@@ -196,7 +169,7 @@ bool TCP_FatherAnalyzer::Skipping() const
 bool TCP_FatherAnalyzer::IsFinished() const 
 {
     bool finished = false;
-    for (TCP_Analyzer* tcp_child : tcp_children) {
+    for (TCP_Analyzer *tcp_child : tcp_children) {
         //finished |= tcp_child->IsFinsihed();
         finished |= tcp_child->finished;
     }
@@ -210,8 +183,16 @@ bool TCP_FatherAnalyzer::Removing() const
 
 bool TCP_FatherAnalyzer::RemoveChildAnalyzer(analyzer::ID id)
 {
-    std::cerr << "TCP_FatherAnalyzer::RemoveChildAnalyzer not implemented!\n";
-    assert(false);
+    for (auto iter = tcp_children.begin(); iter != tcp_children.end(); ) {
+        TCP_Analyzer *tcp_child = *iter;
+        if (tcp_child->GetID() == id) {
+            assert(tcp_child->IsFinished());
+            delete tcp_child;
+            iter = tcp_children.erase(iter);
+        } else {
+            ++iter;
+        }
+    }
 }
 
 bool TCP_FatherAnalyzer::HasChildAnalyzer(Tag tag)
@@ -252,7 +233,6 @@ void TCP_FatherAnalyzer::RemoveSupportAnalyzer(SupportAnalyzer* analyzer)
 
 void TCP_FatherAnalyzer::UpdateConnVal(RecordVal *conn_val)
 {
-    assert(tcp_children.size() == 1);
     for (TCP_Analyzer *tcp_child : tcp_children) {
         tcp_child->UpdateConnVal(conn_val);
     }

@@ -207,7 +207,7 @@ private:
 	unsigned int seen_first_ACK: 1;
 
 	// wzj
-	std::vector<int> curr_pkt_ambiguities;
+	std::vector<bool> curr_pkt_ambiguities;
 	std::vector<int> ambiguity_behavior;
 };
 

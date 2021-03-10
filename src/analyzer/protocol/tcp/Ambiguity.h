@@ -6,7 +6,7 @@ namespace zeek::analyzer::tcp {
 
 enum
 {
-    AMBI_MD5_RST,
+    AMBI_MD5, /* TCP packet with MD5 Option */
     AMBI_MAX  /* Leave at the end! */
 };
 

@@ -148,6 +148,7 @@ TCP_Analyzer::TCP_Analyzer(Connection* conn)
 
 	for (int i = 0; i < AMBI_MAX; i++) 
 		{
+		curr_pkt_ambiguities.push_back(false);
 		ambiguity_behavior.push_back(-1);
 		}
 	}
@@ -161,9 +162,14 @@ TCP_Analyzer::TCP_Analyzer(TCP_Analyzer* ta)
 
 	orig->SetPeer(resp);
 	resp->SetPeer(orig);
-
-	//orig->contents_processor->tcp_analyzer = this;
-	//resp->contents_processor->tcp_analyzer = this;
+	
+	// Set TCP Analyzer for TCP_ApplicationAnalyzers
+	const analyzer_list& children(GetChildren());
+	LOOP_OVER_CONST_CHILDREN(i)
+		{
+		if (TCP_ApplicationAnalyzer *taa = dynamic_cast<TCP_ApplicationAnalyzer*>(*i)) 
+			taa->SetTCP(this);
+		}
 
 	printf("clone packet_children\n");
 	LOOP_OVER_GIVEN_CONST_CHILDREN(i, ta->packet_children)
@@ -171,8 +177,9 @@ TCP_Analyzer::TCP_Analyzer(TCP_Analyzer* ta)
 		printf("clone: %s\n", (*i)->GetAnalyzerName());
 		Analyzer *copy = (*i)->Clone();
 		copy->SetParent(this);
-		if (copy->IsAnalyzer("TCP_ApplicationAnalyzer"))
- 			static_cast<TCP_ApplicationAnalyzer*>(copy)->SetTCP(this);
+    		// Set TCP Analyzer for TCP_ApplicationAnalyzers
+		if (TCP_ApplicationAnalyzer *taa = dynamic_cast<TCP_ApplicationAnalyzer*>(copy)) 
+			taa->SetTCP(this);
 		packet_children.push_back(copy);
 		}
 
@@ -1105,6 +1112,23 @@ void TCP_Analyzer::DeliverPacket(int len, const u_char* data, bool is_orig,
 	TCP_Endpoint* endpoint = is_orig ? orig : resp;
 	TCP_Endpoint* peer = endpoint->peer;
 
+	if ( curr_pkt_ambiguities[AMBI_MD5] ) 
+		{
+		if ( ambiguity_behavior[AMBI_MD5] == 0 )
+			{
+			// old behavior: accept the packet
+			DBG_LOG(DBG_ANALYZER, "%s AMBI_MD5. Old behavior: accept.",
+			        fmt_analyzer(this).c_str());
+			}
+		else if ( ambiguity_behavior[AMBI_MD5] == 1 )
+			{
+			// new behavior: discard the packet
+			DBG_LOG(DBG_ANALYZER, "%s AMBI_MD5. New behavior: discard.",
+			        fmt_analyzer(this).c_str());
+			return;
+			}
+		}
+
 	if ( ! ValidateChecksum(ip, tp, endpoint, len, caplen) )
 		return;
 
@@ -1962,14 +1986,22 @@ bool TCP_Analyzer::ValidateMD5Option(const struct tcphdr* tcp)
 
 bool TCP_Analyzer::CheckAmbiguity(const u_char* data, int len, int caplen)
 	{
+		bool found = false;
  		const struct tcphdr* tp = ExtractTCP_Header(data, len, caplen);
 
-		curr_pkt_ambiguities.clear();
+		// reset curr_pkt_ambiguities
+		for ( int i = 0; i < AMBI_MAX; i++ )
+			{
+			curr_pkt_ambiguities[i] = false;
+			}
 		
- 		if (!ValidateMD5Option(tp))
- 			curr_pkt_ambiguities.push_back(AMBI_MD5_RST);
+ 		if ( !ValidateMD5Option(tp) )
+			{
+ 			curr_pkt_ambiguities[AMBI_MD5] = true;
+			found = true;
+			}
 
- 		return !curr_pkt_ambiguities.empty();
+ 		return found;
 	}
 
 void TCP_Analyzer::DumpAnalyzerTree(int level) const
