@@ -133,6 +133,21 @@ void TCP_Endpoint::AddReassembler(TCP_Reassembler* arg_contents_processor)
 		contents_processor->SetContentsFile(contents_file);
 	}
 
+// ZST: Robust-NIDS
+// Getter for rightmost SACK (sequence number of the last packet in the OOO queue)
+uint64_t TCP_Endpoint::GetRightmostSACK() const
+	{
+	if ( !contents_processor->HasBlocks() )
+		return -1; // no packet in the queue right now
+
+	return contents_processor->GetSEQEndOfLastBlock();
+	}
+
+uint32_t TCP_Endpoint::GetDataBlockListSize() const
+	{
+	return contents_processor->GetDataBlockListSize();
+	}
+
 bool TCP_Endpoint::DataPending() const
 	{
 	if ( contents_processor )

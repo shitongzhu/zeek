@@ -98,7 +98,7 @@ protected:
 	//Pengxiong's code
 	bool ValidateMD5Option(const struct tcphdr* tcp);
 
-	bool CheckAmbiguity(const u_char* data, int len, int caplen);
+	bool CheckAmbiguity(const u_char* data, int len, int caplen, bool is_orig);
 
 	// Returns the TCP header pointed to by data (which we assume is
 	// aligned), updating data, len & caplen.  Returns nil if the header
@@ -179,6 +179,18 @@ protected:
 	                               uint32_t wraps, bool* underflow = nullptr);
 
 	static int get_segment_len(int payload_len, TCP_Flags flags);
+
+	// ZST: Robust-NIDS
+        // The following functions are for determining what ambuiguities are being encountered.
+        bool IsSYNFINPacketInLISTEN(const struct tcphdr* tp, bool is_orig);
+        bool IsInWindowPacket(const struct tcphdr* tp, bool is_orig);
+	bool IsSEQEqualToRcvNxt(const struct tcphdr* tp, bool is_orig);
+	bool IsInWindowSYNPacketInESTABLISHED(const struct tcphdr* tp, bool is_orig);
+	bool IsInWindowRSTPacketInESTABLISHED(const struct tcphdr* tp, bool is_orig);
+        bool IsNoACKPacketInESTABLISHED(const struct tcphdr* tp, bool is_orig);
+        bool IsRSTPacketInESTABLISHED(const struct tcphdr* tp, bool is_orig);
+	bool IsSYNPacketInESTABLISHED(const struct tcphdr* tp, bool is_orig);
+	bool IsRSTPacketWithSEQOfRightmostSACK(const struct tcphdr* tp, bool is_orig);
 
 private:
 

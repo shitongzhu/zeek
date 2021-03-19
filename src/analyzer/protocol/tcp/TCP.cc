@@ -1095,6 +1095,119 @@ static int32_t update_last_seq(TCP_Endpoint* endpoint, uint32_t last_seq,
 	return delta_last;
 	}
 
+// ZST (Robust-NIDS): 
+// Functions for determinig which ambiguity is being encountered
+bool TCP_Analyzer::IsSYNFINPacketInLISTEN(const struct tcphdr* tp, bool is_orig)
+        {
+        TCP_Flags flags(tp);
+	TCP_Endpoint* endpoint = is_orig ? orig : resp;
+
+        if ( flags.SYN() && flags.FIN() && endpoint->state == TCP_ENDPOINT_INACTIVE )
+                return true;
+
+        return false;
+        }
+
+bool TCP_Analyzer::IsInWindowPacket(const struct tcphdr* tp, bool is_orig)
+        {
+	TCP_Endpoint* endpoint = is_orig ? orig : resp;
+
+        uint32_t window_left = resp->ToRelativeSeqSpace(endpoint->window_seq, endpoint->SeqWraps());
+        uint32_t window_right = window_left + endpoint->window;
+	uint32_t seq = resp->ToRelativeSeqSpace(endpoint->LastSeq(), endpoint->SeqWraps());
+	
+        if ( window_left <= seq && seq <= window_right )
+                return true;
+
+        return false;
+        }
+
+bool TCP_Analyzer::IsSEQEqualToRcvNxt(const struct tcphdr* tp, bool is_orig)
+	{
+	TCP_Endpoint* endpoint = is_orig ? orig : resp;
+	
+	uint32_t rcv_nxt = endpoint->window_seq;
+	uint32_t seq = endpoint->ToRelativeSeqSpace(endpoint->LastSeq(), endpoint->SeqWraps());
+
+	if ( seq == rcv_nxt )
+		return true;
+	
+	return false;
+	}
+
+bool TCP_Analyzer::IsInWindowSYNPacketInESTABLISHED(const struct tcphdr* tp, bool is_orig)
+        {
+        TCP_Flags flags(tp);
+	TCP_Endpoint* endpoint = is_orig ? orig : resp;
+
+        if ( IsInWindowPacket(tp, is_orig) && flags.SYN() && 
+	     endpoint->state == TCP_ENDPOINT_ESTABLISHED )
+                return true;
+
+        return false;
+        }
+
+bool TCP_Analyzer::IsInWindowRSTPacketInESTABLISHED(const struct tcphdr* tp, bool is_orig)
+        {
+        TCP_Flags flags(tp);
+	TCP_Endpoint* endpoint = is_orig ? orig : resp;
+
+        if ( IsInWindowPacket(tp, is_orig) && !IsSEQEqualToRcvNxt(tp, is_orig), 
+	     flags.RST() && endpoint->state == TCP_ENDPOINT_ESTABLISHED )
+                return true;
+
+        return false;
+        }
+
+bool TCP_Analyzer::IsNoACKPacketInESTABLISHED(const struct tcphdr* tp, bool is_orig)
+        {
+        TCP_Flags flags(tp);
+	TCP_Endpoint* endpoint = is_orig ? orig : resp;
+
+        if ( !flags.ACK() && endpoint->state == TCP_ENDPOINT_ESTABLISHED )
+                return true;
+
+        return false;
+        }
+
+bool TCP_Analyzer::IsRSTPacketInESTABLISHED(const struct tcphdr* tp, bool is_orig)
+        {
+        TCP_Flags flags(tp);
+	TCP_Endpoint* endpoint = is_orig ? orig : resp;
+
+        if ( flags.RST() && endpoint->state == TCP_ENDPOINT_ESTABLISHED )
+                return true;
+
+        return false;
+        }
+
+bool TCP_Analyzer::IsSYNPacketInESTABLISHED(const struct tcphdr* tp, bool is_orig)
+        {
+        TCP_Flags flags(tp);
+	TCP_Endpoint* endpoint = is_orig ? orig : resp;
+
+        if ( flags.SYN() && endpoint->state == TCP_ENDPOINT_ESTABLISHED )
+                return true;
+
+        return false;
+        }
+
+// Return value is int because it is possible this ambiguity will not be
+// triggered so no packet dropping action needs to be taken
+bool TCP_Analyzer::IsRSTPacketWithSEQOfRightmostSACK(const struct tcphdr* tp, bool is_orig)
+        {
+        TCP_Flags flags(tp);
+	TCP_Endpoint* endpoint = is_orig ? orig : resp;
+
+	uint32_t seq = endpoint->ToRelativeSeqSpace(endpoint->LastSeq(), endpoint->SeqWraps());
+	uint32_t rightmost_sack = endpoint->GetRightmostSACK();
+
+	if ( flags.RST() && seq != rightmost_sack )
+		return true;
+
+        return false;
+        }
+
 void TCP_Analyzer::DeliverPacket(int len, const u_char* data, bool is_orig,
 					uint64_t seq, const IP_Hdr* ip, int caplen)
 	{
@@ -1112,18 +1225,142 @@ void TCP_Analyzer::DeliverPacket(int len, const u_char* data, bool is_orig,
 	TCP_Endpoint* endpoint = is_orig ? orig : resp;
 	TCP_Endpoint* peer = endpoint->peer;
 
+	// ZST: Robust-NIDS
+	// The following are actions taken in each ambiguity
 	if ( curr_pkt_ambiguities[AMBI_MD5] ) 
 		{
-		if ( ambiguity_behavior[AMBI_MD5] == 0 )
+		if ( ambiguity_behavior[AMBI_MD5] == AMBI_BEHAV_OLD )
 			{
 			// old behavior: accept the packet
 			DBG_LOG(DBG_ANALYZER, "%s AMBI_MD5. Old behavior: accept.",
 			        fmt_analyzer(this).c_str());
 			}
-		else if ( ambiguity_behavior[AMBI_MD5] == 1 )
+		else if ( ambiguity_behavior[AMBI_MD5] == AMBI_BEHAV_NEW )
 			{
 			// new behavior: discard the packet
 			DBG_LOG(DBG_ANALYZER, "%s AMBI_MD5. New behavior: discard.",
+			        fmt_analyzer(this).c_str());
+			return;
+			}
+		}
+	
+	if ( curr_pkt_ambiguities[AMBI_SYNFIN_IN_LISTEN] ) 
+		{
+		if ( ambiguity_behavior[AMBI_SYNFIN_IN_LISTEN] == AMBI_BEHAV_OLD )
+			{
+			// old behavior: accept the packet
+			DBG_LOG(DBG_ANALYZER, "%s AMBI_SYNFIN_IN_LISTEN. Old behavior: accept.",
+			        fmt_analyzer(this).c_str());
+			}
+		else if ( ambiguity_behavior[AMBI_SYNFIN_IN_LISTEN] == AMBI_BEHAV_NEW )
+			{
+			// new behavior: discard the packet
+			DBG_LOG(DBG_ANALYZER, "%s AMBI_SYNFIN_IN_LISTEN. New behavior: discard.",
+			        fmt_analyzer(this).c_str());
+			return;
+			}
+		}
+	
+	if ( curr_pkt_ambiguities[AMBI_IN_WINDOW_SYN] ) 
+		{
+		if ( ambiguity_behavior[AMBI_IN_WINDOW_SYN] == AMBI_BEHAV_OLD )
+			{
+			// old behavior: reset the connection
+			DBG_LOG(DBG_ANALYZER, "%s AMBI_IN_WINDOW_SYN. Old behavior: reset the connection.",
+			        fmt_analyzer(this).c_str());
+			ConnectionReset();
+			}
+		else if ( ambiguity_behavior[AMBI_IN_WINDOW_SYN] == AMBI_BEHAV_NEW )
+			{
+			// new behavior: discard the packet and send challenge ACK (not implemented)
+			DBG_LOG(DBG_ANALYZER, "%s AMBI_IN_WINDOW_SYN. New behavior: discard.",
+			        fmt_analyzer(this).c_str());
+			return;
+			}
+		}
+	
+	if ( curr_pkt_ambiguities[AMBI_IN_WINDOW_RST] ) 
+		{
+		if ( ambiguity_behavior[AMBI_IN_WINDOW_RST] == AMBI_BEHAV_OLD )
+			{
+			// old behavior: reset the connection
+			DBG_LOG(DBG_ANALYZER, "%s AMBI_IN_WINDOW_RST. Old behavior: reset the connection.",
+			        fmt_analyzer(this).c_str());
+			ConnectionReset();
+			}
+		else if ( ambiguity_behavior[AMBI_IN_WINDOW_RST] == AMBI_BEHAV_NEW )
+			{
+			// new behavior: discard the packet and send challenge ACK (not implemented)
+			DBG_LOG(DBG_ANALYZER, "%s AMBI_IN_WINDOW_RST. New behavior: discard.",
+			        fmt_analyzer(this).c_str());
+			return;
+			}
+		}
+
+	if ( curr_pkt_ambiguities[AMBI_NO_ACK] ) 
+		{
+		if ( ambiguity_behavior[AMBI_NO_ACK] == AMBI_BEHAV_OLD )
+			{
+			// old behavior: accept the packet
+			DBG_LOG(DBG_ANALYZER, "%s AMBI_NO_ACK. Old behavior: accept.",
+			        fmt_analyzer(this).c_str());
+			}
+		else if ( ambiguity_behavior[AMBI_NO_ACK] == AMBI_BEHAV_NEW )
+			{
+			// new behavior: discard the packet
+			DBG_LOG(DBG_ANALYZER, "%s AMBI_NO_ACK. New behavior: discard.",
+			        fmt_analyzer(this).c_str());
+			return;
+			}
+		}
+	
+	if ( curr_pkt_ambiguities[AMBI_RST_IN_EST] ) 
+		{
+		if ( ambiguity_behavior[AMBI_RST_IN_EST] == AMBI_BEHAV_OLD )
+			{
+			// old behavior: discard the packet
+			DBG_LOG(DBG_ANALYZER, "%s AMBI_RST_IN_EST. Old behavior: discard.",
+			        fmt_analyzer(this).c_str());
+			return;
+			}
+		else if ( ambiguity_behavior[AMBI_NO_ACK] == AMBI_BEHAV_NEW )
+			{
+			// new behavior: accept the packet and send challenge ACK (not implemented)
+			DBG_LOG(DBG_ANALYZER, "%s AMBI_RST_IN_EST. New behavior: accept.",
+			        fmt_analyzer(this).c_str());
+			}
+		}
+	
+	if ( curr_pkt_ambiguities[AMBI_SYN_IN_EST] ) 
+		{
+		if ( ambiguity_behavior[AMBI_SYN_IN_EST] == AMBI_BEHAV_OLD )
+			{
+			// old behavior: discard the packet
+			DBG_LOG(DBG_ANALYZER, "%s AMBI_SYN_IN_EST. Old behavior: discard.",
+			        fmt_analyzer(this).c_str());
+			return;
+			}
+		else if ( ambiguity_behavior[AMBI_SYN_IN_EST] == AMBI_BEHAV_NEW )
+			{
+			// new behavior: accept the packet and send challenge ACK (not imeplemented)
+			DBG_LOG(DBG_ANALYZER, "%s AMBI_SYN_IN_EST. New behavior: accept.",
+			        fmt_analyzer(this).c_str());
+			}
+		}
+	
+	if ( curr_pkt_ambiguities[AMBI_RST_SEQ_SACK] ) 
+		{
+		if ( ambiguity_behavior[AMBI_RST_SEQ_SACK] == AMBI_BEHAV_OLD )
+			{
+			// old behavior: discard the packet
+			DBG_LOG(DBG_ANALYZER, "%s AMBI_RST_SEQ_SACK. Old behavior: discard.",
+			        fmt_analyzer(this).c_str());
+			return;
+			}
+		else if ( ambiguity_behavior[AMBI_RST_SEQ_SACK] == AMBI_BEHAV_OLD )
+			{
+			// new behavior: accept the packet and send challenge ACK (not imeplemented)
+			DBG_LOG(DBG_ANALYZER, "%s AMBI_RST_SEQ_SACK. New behavior: discard.",
 			        fmt_analyzer(this).c_str());
 			return;
 			}
@@ -1984,7 +2221,7 @@ bool TCP_Analyzer::ValidateMD5Option(const struct tcphdr* tcp)
 	return true;
 	}
 
-bool TCP_Analyzer::CheckAmbiguity(const u_char* data, int len, int caplen)
+bool TCP_Analyzer::CheckAmbiguity(const u_char* data, int len, int caplen, bool is_orig)
 	{
 		bool found = false;
  		const struct tcphdr* tp = ExtractTCP_Header(data, len, caplen);
@@ -1998,6 +2235,48 @@ bool TCP_Analyzer::CheckAmbiguity(const u_char* data, int len, int caplen)
  		if ( !ValidateMD5Option(tp) )
 			{
  			curr_pkt_ambiguities[AMBI_MD5] = true;
+			found = true;
+			}
+
+		if ( IsSYNFINPacketInLISTEN(tp, is_orig) )
+			{
+			curr_pkt_ambiguities[AMBI_SYNFIN_IN_LISTEN] = true;
+			found = true;
+			}
+		
+		if ( IsInWindowSYNPacketInESTABLISHED(tp, is_orig) )
+			{
+			curr_pkt_ambiguities[AMBI_IN_WINDOW_SYN] = true;
+			found = true;
+			}
+		
+		if ( IsInWindowRSTPacketInESTABLISHED(tp, is_orig) )
+			{
+			curr_pkt_ambiguities[AMBI_IN_WINDOW_RST] = true;
+			found = true;
+			}
+		
+		if ( IsNoACKPacketInESTABLISHED(tp, is_orig) )
+			{
+			curr_pkt_ambiguities[AMBI_NO_ACK] = true;
+			found = true;
+			}
+		
+		if ( IsRSTPacketInESTABLISHED(tp, is_orig) )
+			{
+			curr_pkt_ambiguities[AMBI_RST_IN_EST] = true;
+			found = true;
+			}
+		
+		if ( IsSYNPacketInESTABLISHED(tp, is_orig) )
+			{
+			curr_pkt_ambiguities[AMBI_SYN_IN_EST] = true;
+			found = true;
+			}
+		
+		if ( IsRSTPacketWithSEQOfRightmostSACK(tp, is_orig) )
+			{
+			curr_pkt_ambiguities[AMBI_RST_SEQ_SACK] = true;
 			found = true;
 			}
 

@@ -291,6 +291,11 @@ public:
 
 	void SetMaxOldBlocks(uint32_t count)	{ max_old_blocks = count; }
 
+	// ZST: Robust-NIDS
+	// Getter for the sequence number of the last data block in the list
+	uint64_t GetSEQEndOfLastBlock() { return block_list.LastBlock().seq + block_list.LastBlock().Size(); }
+	uint32_t GetDataBlockListSize() { return block_list.NumBlocks(); }
+
 protected:
 
 	friend class DataBlockList;

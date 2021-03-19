@@ -52,7 +52,7 @@ void TCP_FatherAnalyzer::NextPacket(int len, const u_char* data, bool is_orig,
 {
     int i = 0;
     for (TCP_Analyzer *tcp_child : tcp_children) {
-        if (tcp_child->CheckAmbiguity(data, len, caplen)) {
+        if (tcp_child->CheckAmbiguity(data, len, caplen, is_orig)) {
             for (int ambiguity_id = 0; ambiguity_id < AMBI_MAX; ambiguity_id++) {
                 if (tcp_child->curr_pkt_ambiguities[ambiguity_id]) {
                     std::cout << "State " << i << ": found ambiguity: " << ambiguity_id << "\n";
@@ -65,13 +65,13 @@ void TCP_FatherAnalyzer::NextPacket(int len, const u_char* data, bool is_orig,
                         // set ambiguity behavior
                         // old
                         for (int j = ambiguity_id; j < AMBI_MAX; j++) {
-                            assert(tcp_child->ambiguity_behavior[j] != 1);
-                            tcp_child->ambiguity_behavior[j] = 0;
+                            assert(tcp_child->ambiguity_behavior[j] != AMBI_BEHAV_NEW);
+                            tcp_child->ambiguity_behavior[j] = AMBI_BEHAV_OLD;
                         }
                         // new
                         for (int j = ambiguity_id; j >= 0; j--) {
-                            assert(new_tcp_child->ambiguity_behavior[j] != 0);
-                            new_tcp_child->ambiguity_behavior[j] = 1;
+                            assert(new_tcp_child->ambiguity_behavior[j] != AMBI_BEHAV_OLD);
+                            new_tcp_child->ambiguity_behavior[j] = AMBI_BEHAV_NEW;
                         }
                     }
                 }

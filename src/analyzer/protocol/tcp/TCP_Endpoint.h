@@ -153,6 +153,12 @@ public:
 
 	void AddReassembler(TCP_Reassembler* contents_processor);
 
+	// ZST: Robust-NIDS
+	// Getter for the sequence number of the last packet in the
+	// out-of-order queue
+	uint64_t GetRightmostSACK() const;
+	uint32_t GetDataBlockListSize() const;
+
 	bool DataPending() const;
 	bool HasUndeliveredData() const;
 	void CheckEOF();
