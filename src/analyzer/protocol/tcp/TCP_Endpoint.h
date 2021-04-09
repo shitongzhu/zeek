@@ -112,7 +112,11 @@ public:
 		return ToFullSeqSpace(tcp_seq_num, wraparounds) - StartSeqI64();
 		}
 
-	void InitStartSeq(int64_t seq) 	{ start_seq = seq; }
+	void InitStartSeq(int64_t seq) 	
+		{ 
+		start_seq = seq; 
+		has_updated_init_seq = true;
+		}
 	void InitLastSeq(uint32_t seq) 	{ last_seq = seq; }
 	void InitAckSeq(uint32_t seq) 	{ ack_seq = seq; }
 
@@ -158,6 +162,7 @@ public:
 	// out-of-order queue
 	uint64_t GetRightmostSACK() const;
 	uint32_t GetDataBlockListSize() const;
+	bool HasUpdatedInitSeq() const  { return has_updated_init_seq; }
 
 	bool DataPending() const;
 	bool HasUndeliveredData() const;
@@ -245,6 +250,10 @@ protected:
 				// Signed 64-bit to detect initial sequence wrapping.
 				// Use StartSeq() accessor if need it in terms of
 				// an absolute TCP sequence number.
+	
+	// ZST: Robust-NIDS
+	bool has_updated_init_seq = false;
+
 	uint32_t last_seq, ack_seq;	// in host order
 	uint32_t seq_wraps, ack_wraps;	// Number of times 32-bit TCP sequence space
 					// has wrapped around (overflowed).

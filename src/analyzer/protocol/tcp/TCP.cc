@@ -1108,13 +1108,17 @@ bool TCP_Analyzer::IsSYNFINPacketInLISTEN(const struct tcphdr* tp, bool is_orig)
         return false;
         }
 
+// Note that since we currenly handle ambiguities BEFORE updating endpoint's 
+// states, we need to be careful in calculating stateful values such as relative 
+// sequence numbers (these values can depend on unupdated states).
 bool TCP_Analyzer::IsInWindowPacket(const struct tcphdr* tp, bool is_orig)
         {
 	TCP_Endpoint* endpoint = is_orig ? orig : resp;
 
-        uint32_t window_left = resp->ToRelativeSeqSpace(endpoint->window_seq, endpoint->SeqWraps());
+        uint32_t window_left = endpoint->ToRelativeSeqSpace(endpoint->window_seq, endpoint->SeqWraps());
         uint32_t window_right = window_left + endpoint->window;
-	uint32_t seq = resp->ToRelativeSeqSpace(endpoint->LastSeq(), endpoint->SeqWraps());
+	uint32_t pkt_seq = (uint32_t) ntohl(tp->th_seq);
+	uint32_t seq = endpoint->ToRelativeSeqSpace(pkt_seq, endpoint->SeqWraps());
 	
         if ( window_left <= seq && seq <= window_right )
                 return true;
@@ -1140,6 +1144,10 @@ bool TCP_Analyzer::IsInWindowSYNPacketInESTABLISHED(const struct tcphdr* tp, boo
         TCP_Flags flags(tp);
 	TCP_Endpoint* endpoint = is_orig ? orig : resp;
 
+	// This indicates this is the first packet in the current connection
+	if ( !endpoint->HasUpdatedInitSeq() )
+		return false;
+
         if ( IsInWindowPacket(tp, is_orig) && flags.SYN() && 
 	     endpoint->state == TCP_ENDPOINT_ESTABLISHED )
                 return true;
@@ -1151,6 +1159,10 @@ bool TCP_Analyzer::IsInWindowRSTPacketInESTABLISHED(const struct tcphdr* tp, boo
         {
         TCP_Flags flags(tp);
 	TCP_Endpoint* endpoint = is_orig ? orig : resp;
+
+	// This indicates this is the first packet in the current connection
+	if ( !endpoint->HasUpdatedInitSeq() )
+		return false;
 
         if ( IsInWindowPacket(tp, is_orig) && !IsSEQEqualToRcvNxt(tp, is_orig), 
 	     flags.RST() && endpoint->state == TCP_ENDPOINT_ESTABLISHED )
@@ -1192,14 +1204,13 @@ bool TCP_Analyzer::IsSYNPacketInESTABLISHED(const struct tcphdr* tp, bool is_ori
         return false;
         }
 
-// Return value is int because it is possible this ambiguity will not be
-// triggered so no packet dropping action needs to be taken
 bool TCP_Analyzer::IsRSTPacketWithSEQOfRightmostSACK(const struct tcphdr* tp, bool is_orig)
         {
         TCP_Flags flags(tp);
 	TCP_Endpoint* endpoint = is_orig ? orig : resp;
-
-	uint32_t seq = endpoint->ToRelativeSeqSpace(endpoint->LastSeq(), endpoint->SeqWraps());
+	
+	uint32_t pkt_seq = (uint32_t) ntohl(tp->th_seq);
+	uint32_t seq = endpoint->ToRelativeSeqSpace(pkt_seq, endpoint->SeqWraps());
 	uint32_t rightmost_sack = endpoint->GetRightmostSACK();
 
 	if ( flags.RST() && seq != rightmost_sack )
@@ -1323,7 +1334,7 @@ void TCP_Analyzer::DeliverPacket(int len, const u_char* data, bool is_orig,
 			        fmt_analyzer(this).c_str());
 			return;
 			}
-		else if ( ambiguity_behavior[AMBI_NO_ACK] == AMBI_BEHAV_NEW )
+		else if ( ambiguity_behavior[AMBI_RST_IN_EST] == AMBI_BEHAV_NEW )
 			{
 			// new behavior: accept the packet and send challenge ACK (not implemented)
 			DBG_LOG(DBG_ANALYZER, "%s AMBI_RST_IN_EST. New behavior: accept.",
@@ -2187,21 +2198,17 @@ bool TCP_Analyzer::ValidateMD5Option(const struct tcphdr* tcp)
 	while ( options < opt_end )
 		{
 		unsigned int opt = options[0];
-		// if (opt != 1 && opt != 8)
-		//      printf("opt %d\n", opt);
-
+		
+		unsigned int opt_len;
+		
 		if ( opt == 19 )  //TCP MD5 Option
 			return false;
 
-		unsigned int opt_len;
-		
 		if ( opt < 2 )
 			opt_len = 1;
-		
 		else if ( options + 1 >= opt_end )
 			// We've run off the end, no room for the length.
 			break;
-
 		else
 			opt_len = options[1];
        	
