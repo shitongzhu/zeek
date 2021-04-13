@@ -1325,40 +1325,6 @@ void TCP_Analyzer::DeliverPacket(int len, const u_char* data, bool is_orig,
 			}
 		}
 	
-	if ( curr_pkt_ambiguities[AMBI_RST_IN_EST] ) 
-		{
-		if ( ambiguity_behavior[AMBI_RST_IN_EST] == AMBI_BEHAV_OLD )
-			{
-			// old behavior: discard the packet
-			DBG_LOG(DBG_ANALYZER, "%s AMBI_RST_IN_EST. Old behavior: discard.",
-			        fmt_analyzer(this).c_str());
-			return;
-			}
-		else if ( ambiguity_behavior[AMBI_RST_IN_EST] == AMBI_BEHAV_NEW )
-			{
-			// new behavior: accept the packet and send challenge ACK (not implemented)
-			DBG_LOG(DBG_ANALYZER, "%s AMBI_RST_IN_EST. New behavior: accept.",
-			        fmt_analyzer(this).c_str());
-			}
-		}
-	
-	if ( curr_pkt_ambiguities[AMBI_SYN_IN_EST] ) 
-		{
-		if ( ambiguity_behavior[AMBI_SYN_IN_EST] == AMBI_BEHAV_OLD )
-			{
-			// old behavior: discard the packet
-			DBG_LOG(DBG_ANALYZER, "%s AMBI_SYN_IN_EST. Old behavior: discard.",
-			        fmt_analyzer(this).c_str());
-			return;
-			}
-		else if ( ambiguity_behavior[AMBI_SYN_IN_EST] == AMBI_BEHAV_NEW )
-			{
-			// new behavior: accept the packet and send challenge ACK (not imeplemented)
-			DBG_LOG(DBG_ANALYZER, "%s AMBI_SYN_IN_EST. New behavior: accept.",
-			        fmt_analyzer(this).c_str());
-			}
-		}
-	
 	if ( curr_pkt_ambiguities[AMBI_RST_SEQ_SACK] ) 
 		{
 		if ( ambiguity_behavior[AMBI_RST_SEQ_SACK] == AMBI_BEHAV_OLD )
@@ -2195,15 +2161,18 @@ bool TCP_Analyzer::ValidateMD5Option(const struct tcphdr* tcp)
 	const u_char* options = (const u_char*) tcp + sizeof(struct tcphdr);
 	const u_char* opt_end = (const u_char*) tcp + tcp->th_off * 4;
 
+	//if ( !tcp )
+	//	return;
+
 	while ( options < opt_end )
 		{
 		unsigned int opt = options[0];
 		
-		unsigned int opt_len;
-		
 		if ( opt == 19 )  //TCP MD5 Option
 			return false;
 
+		unsigned int opt_len;
+		
 		if ( opt < 2 )
 			opt_len = 1;
 		else if ( options + 1 >= opt_end )
@@ -2232,6 +2201,9 @@ bool TCP_Analyzer::CheckAmbiguity(const u_char* data, int len, int caplen, bool 
 	{
 		bool found = false;
  		const struct tcphdr* tp = ExtractTCP_Header(data, len, caplen);
+
+		if ( !tp )
+			return false;
 
 		// reset curr_pkt_ambiguities
 		for ( int i = 0; i < AMBI_MAX; i++ )
@@ -2266,18 +2238,6 @@ bool TCP_Analyzer::CheckAmbiguity(const u_char* data, int len, int caplen, bool 
 		if ( IsNoACKPacketInESTABLISHED(tp, is_orig) )
 			{
 			curr_pkt_ambiguities[AMBI_NO_ACK] = true;
-			found = true;
-			}
-		
-		if ( IsRSTPacketInESTABLISHED(tp, is_orig) )
-			{
-			curr_pkt_ambiguities[AMBI_RST_IN_EST] = true;
-			found = true;
-			}
-		
-		if ( IsSYNPacketInESTABLISHED(tp, is_orig) )
-			{
-			curr_pkt_ambiguities[AMBI_SYN_IN_EST] = true;
 			found = true;
 			}
 		

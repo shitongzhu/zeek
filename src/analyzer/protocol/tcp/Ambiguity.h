@@ -11,9 +11,7 @@ enum
     AMBI_IN_WINDOW_SYN, /* In-window SYN in ESTABLISHED state -- 2 */
     AMBI_IN_WINDOW_RST, /* In-window RST in ESTABLISHED state -- 3 */
     AMBI_NO_ACK, /* Packets without ACK flag -- 4 */
-    AMBI_RST_IN_EST, /* RST packets in ESTABLISHED state -- 5 */
-    AMBI_SYN_IN_EST, /* SYN packets in ESTABLISHED state -- 6*/
-    AMBI_RST_SEQ_SACK, /* RST packets with SEQ = rcv_nxt -- 7*/
+    AMBI_RST_SEQ_SACK, /* RST packets with SEQ = rcv_nxt -- 5*/
     AMBI_MAX  /* Leave at the end! */
 };
 
