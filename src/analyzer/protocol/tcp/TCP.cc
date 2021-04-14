@@ -45,7 +45,9 @@ static const int RESP = 2;
 static RecordVal* build_syn_packet_val(bool is_orig, const IP_Hdr* ip,
                                              const struct tcphdr* tcp)
 	{
-	int winscale = -1;
+	// ZST: Robust-NIDS
+	// Default configuration (-1) disables winscale
+	int winscale = 1;
 	int MSS = 0;
 	int SACK = 0;
 
@@ -1123,8 +1125,8 @@ bool TCP_Analyzer::IsInWindowPacket(const struct tcphdr* tp, bool is_orig)
 	if ( !endpoint )
 		return false;
 
-        uint32_t window_left = (uint32_t) ntohl(endpoint->window_seq);
-	//uint32_t window_left = endpoint->ToRelativeSeqSpace(window_left_abs, endpoint->SeqWraps());
+        uint32_t window_left_abs = endpoint->window_seq;
+	uint32_t window_left = endpoint->ToRelativeSeqSpace(window_left_abs, endpoint->SeqWraps());
         uint32_t window_right = window_left + endpoint->window;
 	uint32_t pkt_seq = (uint32_t) ntohl(tp->th_seq);
 	uint32_t seq = endpoint->ToRelativeSeqSpace(pkt_seq, endpoint->SeqWraps());
@@ -1193,7 +1195,7 @@ bool TCP_Analyzer::IsInWindowRSTPacketInESTABLISHED(const struct tcphdr* tp, boo
         return false;
         }
 
-bool TCP_Analyzer::IsNoACKPacketInESTABLISHED(const struct tcphdr* tp, bool is_orig)
+bool TCP_Analyzer::IsNoACKPacketInESTABLISHED(const struct tcphdr* tp, bool is_orig, int len)
         {
         TCP_Flags flags(tp);
 	TCP_Endpoint* endpoint = is_orig ? orig : resp;
@@ -1202,7 +1204,7 @@ bool TCP_Analyzer::IsNoACKPacketInESTABLISHED(const struct tcphdr* tp, bool is_o
 	if ( !endpoint )
 		return false;
 
-        if ( !flags.ACK() && endpoint->state == TCP_ENDPOINT_ESTABLISHED )
+        if ( !flags.ACK() && endpoint->state == TCP_ENDPOINT_ESTABLISHED && (len > 0))
                 return true;
 
         return false;
@@ -1251,7 +1253,7 @@ bool TCP_Analyzer::IsRSTPacketWithSEQOfRightmostSACK(const struct tcphdr* tp, bo
 	uint32_t seq = endpoint->ToRelativeSeqSpace(pkt_seq, endpoint->SeqWraps());
 	uint32_t rightmost_sack = endpoint->GetRightmostSACK();
 
-	if ( flags.RST() && seq != rightmost_sack )
+	if ( flags.RST() && seq == rightmost_sack )
 		return true;
 
         return false;
@@ -1318,6 +1320,7 @@ void TCP_Analyzer::DeliverPacket(int len, const u_char* data, bool is_orig,
 			DBG_LOG(DBG_ANALYZER, "%s AMBI_IN_WINDOW_SYN. Old behavior: reset the connection.",
 			        fmt_analyzer(this).c_str());
 			ConnectionReset();
+			return;
 			}
 		else if ( ambiguity_behavior[AMBI_IN_WINDOW_SYN] == AMBI_BEHAV_NEW )
 			{
@@ -1336,6 +1339,7 @@ void TCP_Analyzer::DeliverPacket(int len, const u_char* data, bool is_orig,
 			DBG_LOG(DBG_ANALYZER, "%s AMBI_IN_WINDOW_RST. Old behavior: reset the connection.",
 			        fmt_analyzer(this).c_str());
 			ConnectionReset();
+			return;
 			}
 		else if ( ambiguity_behavior[AMBI_IN_WINDOW_RST] == AMBI_BEHAV_NEW )
 			{
@@ -1372,11 +1376,12 @@ void TCP_Analyzer::DeliverPacket(int len, const u_char* data, bool is_orig,
 			        fmt_analyzer(this).c_str());
 			return;
 			}
-		else if ( ambiguity_behavior[AMBI_RST_SEQ_SACK] == AMBI_BEHAV_OLD )
+		else if ( ambiguity_behavior[AMBI_RST_SEQ_SACK] == AMBI_BEHAV_NEW )
 			{
 			// new behavior: accept the packet and send challenge ACK (not imeplemented)
 			DBG_LOG(DBG_ANALYZER, "%s AMBI_RST_SEQ_SACK. New behavior: discard.",
 			        fmt_analyzer(this).c_str());
+			ConnectionReset();
 			return;
 			}
 		}
@@ -2273,7 +2278,7 @@ bool TCP_Analyzer::CheckAmbiguity(const u_char* data, int len, int caplen, bool 
 			found = true;
 			}
 		
-		if ( IsNoACKPacketInESTABLISHED(tp, is_orig) )
+		if ( IsNoACKPacketInESTABLISHED(tp, is_orig, len) )
 			{
 			curr_pkt_ambiguities[AMBI_NO_ACK] = true;
 			found = true;

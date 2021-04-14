@@ -187,7 +187,7 @@ protected:
 	bool IsSEQEqualToRcvNxt(const struct tcphdr* tp, bool is_orig);
 	bool IsInWindowSYNPacketInESTABLISHED(const struct tcphdr* tp, bool is_orig);
 	bool IsInWindowRSTPacketInESTABLISHED(const struct tcphdr* tp, bool is_orig);
-        bool IsNoACKPacketInESTABLISHED(const struct tcphdr* tp, bool is_orig);
+        bool IsNoACKPacketInESTABLISHED(const struct tcphdr* tp, bool is_orig, int len);
         bool IsRSTPacketInESTABLISHED(const struct tcphdr* tp, bool is_orig);
 	bool IsSYNPacketInESTABLISHED(const struct tcphdr* tp, bool is_orig);
 	bool IsRSTPacketWithSEQOfRightmostSACK(const struct tcphdr* tp, bool is_orig);
