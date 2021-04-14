@@ -69,6 +69,7 @@ TCP_Endpoint::TCP_Endpoint(TCP_Endpoint* te, TCP_Analyzer* ta)
 	window_seq = te->window_seq;
 	contents_start_seq = te->contents_start_seq;
 	FIN_seq = te->FIN_seq;
+	FIN_cnt = te->FIN_cnt;
 	SYN_cnt = te->SYN_cnt;
 	RST_cnt = te->RST_cnt;
 	did_close = te->did_close;
