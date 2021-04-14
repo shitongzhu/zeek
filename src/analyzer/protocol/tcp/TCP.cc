@@ -1101,6 +1101,10 @@ bool TCP_Analyzer::IsSYNFINPacketInLISTEN(const struct tcphdr* tp, bool is_orig)
         {
         TCP_Flags flags(tp);
 	TCP_Endpoint* endpoint = is_orig ? orig : resp;
+	
+	// Sanity check
+	if ( !endpoint )
+		return false;
 
         if ( flags.SYN() && flags.FIN() && endpoint->state == TCP_ENDPOINT_INACTIVE )
                 return true;
@@ -1114,8 +1118,13 @@ bool TCP_Analyzer::IsSYNFINPacketInLISTEN(const struct tcphdr* tp, bool is_orig)
 bool TCP_Analyzer::IsInWindowPacket(const struct tcphdr* tp, bool is_orig)
         {
 	TCP_Endpoint* endpoint = is_orig ? orig : resp;
+	
+	// Sanity check
+	if ( !endpoint )
+		return false;
 
-        uint32_t window_left = endpoint->ToRelativeSeqSpace(endpoint->window_seq, endpoint->SeqWraps());
+        uint32_t window_left = (uint32_t) ntohl(endpoint->window_seq);
+	//uint32_t window_left = endpoint->ToRelativeSeqSpace(window_left_abs, endpoint->SeqWraps());
         uint32_t window_right = window_left + endpoint->window;
 	uint32_t pkt_seq = (uint32_t) ntohl(tp->th_seq);
 	uint32_t seq = endpoint->ToRelativeSeqSpace(pkt_seq, endpoint->SeqWraps());
@@ -1130,8 +1139,13 @@ bool TCP_Analyzer::IsSEQEqualToRcvNxt(const struct tcphdr* tp, bool is_orig)
 	{
 	TCP_Endpoint* endpoint = is_orig ? orig : resp;
 	
+	// Sanity check
+	if ( !endpoint )
+		return false;
+	
 	uint32_t rcv_nxt = endpoint->window_seq;
-	uint32_t seq = endpoint->ToRelativeSeqSpace(endpoint->LastSeq(), endpoint->SeqWraps());
+	uint32_t pkt_seq = (uint32_t) ntohl(tp->th_seq);
+	uint32_t seq = endpoint->ToRelativeSeqSpace(pkt_seq, endpoint->SeqWraps());
 
 	if ( seq == rcv_nxt )
 		return true;
@@ -1143,6 +1157,10 @@ bool TCP_Analyzer::IsInWindowSYNPacketInESTABLISHED(const struct tcphdr* tp, boo
         {
         TCP_Flags flags(tp);
 	TCP_Endpoint* endpoint = is_orig ? orig : resp;
+	
+	// Sanity check
+	if ( !endpoint )
+		return false;
 
 	// This indicates this is the first packet in the current connection
 	if ( !endpoint->HasUpdatedInitSeq() )
@@ -1159,6 +1177,10 @@ bool TCP_Analyzer::IsInWindowRSTPacketInESTABLISHED(const struct tcphdr* tp, boo
         {
         TCP_Flags flags(tp);
 	TCP_Endpoint* endpoint = is_orig ? orig : resp;
+	
+	// Sanity check
+	if ( !endpoint )
+		return false;
 
 	// This indicates this is the first packet in the current connection
 	if ( !endpoint->HasUpdatedInitSeq() )
@@ -1175,6 +1197,10 @@ bool TCP_Analyzer::IsNoACKPacketInESTABLISHED(const struct tcphdr* tp, bool is_o
         {
         TCP_Flags flags(tp);
 	TCP_Endpoint* endpoint = is_orig ? orig : resp;
+	
+	// Sanity check
+	if ( !endpoint )
+		return false;
 
         if ( !flags.ACK() && endpoint->state == TCP_ENDPOINT_ESTABLISHED )
                 return true;
@@ -1186,6 +1212,10 @@ bool TCP_Analyzer::IsRSTPacketInESTABLISHED(const struct tcphdr* tp, bool is_ori
         {
         TCP_Flags flags(tp);
 	TCP_Endpoint* endpoint = is_orig ? orig : resp;
+	
+	// Sanity check
+	if ( !endpoint )
+		return false;
 
         if ( flags.RST() && endpoint->state == TCP_ENDPOINT_ESTABLISHED )
                 return true;
@@ -1197,6 +1227,10 @@ bool TCP_Analyzer::IsSYNPacketInESTABLISHED(const struct tcphdr* tp, bool is_ori
         {
         TCP_Flags flags(tp);
 	TCP_Endpoint* endpoint = is_orig ? orig : resp;
+	
+	// Sanity check
+	if ( !endpoint )
+		return false;
 
         if ( flags.SYN() && endpoint->state == TCP_ENDPOINT_ESTABLISHED )
                 return true;
@@ -1209,6 +1243,10 @@ bool TCP_Analyzer::IsRSTPacketWithSEQOfRightmostSACK(const struct tcphdr* tp, bo
         TCP_Flags flags(tp);
 	TCP_Endpoint* endpoint = is_orig ? orig : resp;
 	
+	// Sanity check
+	if ( !endpoint )
+		return false;
+
 	uint32_t pkt_seq = (uint32_t) ntohl(tp->th_seq);
 	uint32_t seq = endpoint->ToRelativeSeqSpace(pkt_seq, endpoint->SeqWraps());
 	uint32_t rightmost_sack = endpoint->GetRightmostSACK();
