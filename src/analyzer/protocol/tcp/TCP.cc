@@ -1319,8 +1319,6 @@ void TCP_Analyzer::DeliverPacket(int len, const u_char* data, bool is_orig,
 			// old behavior: reset the connection
 			DBG_LOG(DBG_ANALYZER, "%s AMBI_IN_WINDOW_SYN. Old behavior: reset the connection.",
 			        fmt_analyzer(this).c_str());
-			ConnectionReset();
-			return;
 			}
 		else if ( ambiguity_behavior[AMBI_IN_WINDOW_SYN] == AMBI_BEHAV_NEW )
 			{
@@ -1338,8 +1336,6 @@ void TCP_Analyzer::DeliverPacket(int len, const u_char* data, bool is_orig,
 			// old behavior: reset the connection
 			DBG_LOG(DBG_ANALYZER, "%s AMBI_IN_WINDOW_RST. Old behavior: reset the connection.",
 			        fmt_analyzer(this).c_str());
-			ConnectionReset();
-			return;
 			}
 		else if ( ambiguity_behavior[AMBI_IN_WINDOW_RST] == AMBI_BEHAV_NEW )
 			{
@@ -1367,22 +1363,20 @@ void TCP_Analyzer::DeliverPacket(int len, const u_char* data, bool is_orig,
 			}
 		}
 	
-	if ( curr_pkt_ambiguities[AMBI_RST_SEQ_SACK] ) 
+	if ( curr_pkt_ambiguities[AMBI_RST_RIGHTMOST_SACK] ) 
 		{
-		if ( ambiguity_behavior[AMBI_RST_SEQ_SACK] == AMBI_BEHAV_OLD )
+		if ( ambiguity_behavior[AMBI_RST_RIGHTMOST_SACK] == AMBI_BEHAV_OLD )
 			{
 			// old behavior: discard the packet
-			DBG_LOG(DBG_ANALYZER, "%s AMBI_RST_SEQ_SACK. Old behavior: discard.",
+			DBG_LOG(DBG_ANALYZER, "%s AMBI_RST_RIGHTMOST_SACK. Old behavior: discard.",
 			        fmt_analyzer(this).c_str());
 			return;
 			}
-		else if ( ambiguity_behavior[AMBI_RST_SEQ_SACK] == AMBI_BEHAV_NEW )
+		else if ( ambiguity_behavior[AMBI_RST_RIGHTMOST_SACK] == AMBI_BEHAV_NEW )
 			{
 			// new behavior: accept the packet and send challenge ACK (not imeplemented)
-			DBG_LOG(DBG_ANALYZER, "%s AMBI_RST_SEQ_SACK. New behavior: discard.",
+			DBG_LOG(DBG_ANALYZER, "%s AMBI_RST_RIGHTMOST_SACK. New behavior: reset the connection.",
 			        fmt_analyzer(this).c_str());
-			ConnectionReset();
-			return;
 			}
 		}
 
@@ -2286,7 +2280,7 @@ bool TCP_Analyzer::CheckAmbiguity(const u_char* data, int len, int caplen, bool 
 		
 		if ( IsRSTPacketWithSEQOfRightmostSACK(tp, is_orig) )
 			{
-			curr_pkt_ambiguities[AMBI_RST_SEQ_SACK] = true;
+			curr_pkt_ambiguities[AMBI_RST_RIGHTMOST_SACK] = true;
 			found = true;
 			}
 
