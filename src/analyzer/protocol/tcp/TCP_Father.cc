@@ -53,9 +53,6 @@ void TCP_FatherAnalyzer::NextPacket(int len, const u_char* data, bool is_orig,
     int i = 0;
 
     for (TCP_Analyzer *tcp_child : tcp_children) {
-	//const struct tcphdr* tp = tcp_child->ExtractTCP_Header(data, len, caplen);
-	//if ( !tp )
-	//    continue;
         if (tcp_child->CheckAmbiguity(data, len, caplen, is_orig)) {
             for (int ambiguity_id = 0; ambiguity_id < AMBI_MAX; ambiguity_id++) {
                 if (tcp_child->curr_pkt_ambiguities[ambiguity_id]) {
