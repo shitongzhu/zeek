@@ -10,8 +10,8 @@ enum
     AMBI_SYNFIN_IN_LISTEN, /* SYN + FIN packet in LISTEN state -- 1 */
     AMBI_IN_WINDOW_SYN, /* In-window SYN in ESTABLISHED state -- 2 */
     AMBI_IN_WINDOW_RST, /* In-window RST in ESTABLISHED state -- 3 */
-    AMBI_NO_ACK, /* Packets without ACK flag -- 4 */
-    AMBI_RST_SEQ_SACK, /* RST packets with SEQ = rcv_nxt -- 5*/
+    AMBI_NO_ACK, /* Data packets without ACK flag -- 4 */
+    AMBI_RST_RIGHTMOST_SACK, /* RST packets with SEQ = rightmost SACK -- 5*/
     AMBI_MAX  /* Leave at the end! */
 };
 

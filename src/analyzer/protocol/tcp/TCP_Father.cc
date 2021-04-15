@@ -51,6 +51,7 @@ void TCP_FatherAnalyzer::NextPacket(int len, const u_char* data, bool is_orig,
                 uint64_t seq, const IP_Hdr* ip, int caplen)
 {
     int i = 0;
+    std::vector<TCP_Analyzer*> new_tcp_children;
 
     for (TCP_Analyzer *tcp_child : tcp_children) {
         if (tcp_child->CheckAmbiguity(data, len, caplen, is_orig)) {
@@ -61,7 +62,7 @@ void TCP_FatherAnalyzer::NextPacket(int len, const u_char* data, bool is_orig,
                         // fork
                         std::cout << "Forking State " << i << "\n";
                         TCP_Analyzer *new_tcp_child = Fork(tcp_child);
-                        tcp_children.push_back(new_tcp_child);
+                        new_tcp_children.push_back(new_tcp_child);
                         
                         // set ambiguity behavior
                         // old
@@ -80,7 +81,12 @@ void TCP_FatherAnalyzer::NextPacket(int len, const u_char* data, bool is_orig,
         }
         i++;
     }
+
+    for (TCP_Analyzer *new_tcp_child : new_tcp_children) {
+        tcp_children.push_back(new_tcp_child);
+    }
     
+    // handle the packet
     for (TCP_Analyzer *tcp_child : tcp_children) {
         tcp_child->NextPacket(len, data, is_orig, seq, ip, caplen);
     }
