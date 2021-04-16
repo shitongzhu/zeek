@@ -21,6 +21,9 @@ public:
 
 	void Dispatch(double t, bool is_expire) override;
 
+	analyzer_timer_func TimerFunc() { return timer; }
+	int DoExpire() { return do_expire; }
+
 protected:
 
 	void Init(Analyzer* analyzer, analyzer_timer_func timer, int do_expire);
@@ -198,7 +201,13 @@ Analyzer::Analyzer(Analyzer* a)
 
 	protocol_confirmed = a->protocol_confirmed;
 
-	//TODO: clone timers?
+	// clone timers
+	for ( auto timer : a->timers )
+		{
+		AnalyzerTimer* atimer = dynamic_cast<AnalyzerTimer*>(timer);
+		AddTimer(atimer->TimerFunc(), atimer->Time(), atimer->DoExpire(), atimer->Type());
+		}
+	
 	timers_canceled = a->timers_canceled;
 	skip = a->skip;
 	finished = a->finished;
