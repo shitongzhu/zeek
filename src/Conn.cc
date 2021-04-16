@@ -20,6 +20,9 @@
 #include "zeek/analyzer/Manager.h"
 #include "zeek/iosource/IOSource.h"
 
+// ZST: Robust-NIDS
+#include "zeek/analyzer/protocol/tcp/Ambiguity.h"
+
 namespace zeek {
 namespace detail {
 
@@ -125,6 +128,33 @@ Connection::Connection(NetSessions* s, const detail::ConnIDKey& k, double t,
 	// ZST: Robust-NIDS
 	// Mark the begining of the connection
 	printf("CONN_BEGIN\n");
+	InitAmbiguityCount();
+	}
+
+void Connection::InitAmbiguityCount()
+	{
+	for ( int i = 0; i < analyzer::tcp::NUM_AMBIGUITIES; i++ )
+		{
+		encountered_ambiguities.push_back(false);
+		}
+	}
+
+void Connection::RegisterAmbiguity(const int id)
+	{
+	encountered_ambiguities[id] = true;
+	}
+
+void Connection::PrintAmbiguities()
+	{
+	printf("[AMBIGUITY_COUNT]");
+	for ( int i = 0; i < analyzer::tcp::NUM_AMBIGUITIES; i++ )
+		{
+		bool ambiguity = encountered_ambiguities[i];
+		if ( ambiguity )
+			printf("%d", i);
+		}
+	printf(",%d", total_connections);
+	printf("\n");
 	}
 
 #pragma GCC diagnostic push
@@ -154,6 +184,7 @@ Connection::~Connection()
 	// ZST: Robust-NIDS
 	// Mark the teardown of the connection
 	printf("CONN_ENDED\n");
+	PrintAmbiguities();
 	}
 
 void Connection::CheckEncapsulation(const std::shared_ptr<EncapsulationStack>& arg_encap)

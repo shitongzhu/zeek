@@ -321,6 +321,11 @@ public:
 	bool PermitWeird(const char* name, uint64_t threshold, uint64_t rate,
 	                 double duration);
 
+	// ZST: Robust-NIDS
+	// Register ambiguities
+	void RegisterAmbiguity(int id);
+	void PrintAmbiguities();
+
 protected:
 
 	// Add the given timer to expire at time t.  If do_expire
@@ -380,6 +385,12 @@ protected:
 
 	UID uid;	// Globally unique connection ID.
 	detail::WeirdStateMap weird_state;
+	
+	// ZST: Robust-NIDS
+	// This list keeps track of amibiguity occurences in
+	// the current connection
+	std::vector<bool> encountered_ambiguities;
+	void InitAmbiguityCount();
 };
 
 namespace detail {

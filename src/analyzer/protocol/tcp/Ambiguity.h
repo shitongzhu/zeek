@@ -15,6 +15,8 @@ enum
     AMBI_MAX  /* Leave at the end! */
 };
 
+const int NUM_AMBIGUITIES = 6;
+
 enum
 {
     AMBI_BEHAV_UNDEF = -1, /* Undefined behaviour (initial value) -- -1 */

@@ -2353,42 +2353,42 @@ bool TCP_Analyzer::CheckAmbiguity(const u_char* data, int len, int caplen, bool 
 		
  		if ( !ValidateMD5Option(tp) )
 			{
-			printf("AMBI_MD5\n");
+			Conn()->RegisterAmbiguity(AMBI_MD5);
  			curr_pkt_ambiguities[AMBI_MD5] = true;
 			found = true;
 			}
 
 		if ( IsSYNFINPacketInLISTEN(tp, is_orig) )
 			{
-			printf("AMBI_SYNFIN_IN_LISTEN\n");
+			Conn()->RegisterAmbiguity(AMBI_SYNFIN_IN_LISTEN);
 			curr_pkt_ambiguities[AMBI_SYNFIN_IN_LISTEN] = true;
 			found = true;
 			}
 		
 		if ( IsInWindowSYNPacketInESTABLISHED(tp, is_orig) )
 			{
-			printf("AMBI_IN_WINDOW_SYN\n");
+			Conn()->RegisterAmbiguity(AMBI_IN_WINDOW_SYN);
 			curr_pkt_ambiguities[AMBI_IN_WINDOW_SYN] = true;
 			found = true;
 			}
 		
 		if ( IsInWindowRSTPacketInESTABLISHED(tp, is_orig) )
 			{
-			printf("AMBI_IN_WINDOW_RST\n");
+			Conn()->RegisterAmbiguity(AMBI_IN_WINDOW_RST);
 			curr_pkt_ambiguities[AMBI_IN_WINDOW_RST] = true;
 			found = true;
 			}
 		
 		if ( IsNoACKPacketInESTABLISHED(tp, is_orig, len) )
 			{
-			printf("AMBI_NO_ACK\n");
+			Conn()->RegisterAmbiguity(AMBI_NO_ACK);
 			curr_pkt_ambiguities[AMBI_NO_ACK] = true;
 			found = true;
 			}
 		
 		if ( IsRSTPacketWithSEQOfRightmostSACK(tp, is_orig) )
 			{
-			printf("AMBI_RST_RIGHTMOST_SACK\n");
+			Conn()->RegisterAmbiguity(AMBI_RST_RIGHTMOST_SACK);
 			curr_pkt_ambiguities[AMBI_RST_RIGHTMOST_SACK] = true;
 			found = true;
 			}
