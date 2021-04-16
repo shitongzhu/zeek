@@ -206,9 +206,10 @@ bool TCP_FatherAnalyzer::RemoveChildAnalyzer(analyzer::ID id)
     for (auto iter = tcp_children.begin(); iter != tcp_children.end(); ) {
         TCP_Analyzer *tcp_child = *iter;
         if (tcp_child->GetID() == id) {
-            assert(tcp_child->IsFinished());
-            delete tcp_child;
+            if (!tcp_child->IsFinished())
+                tcp_child->Done();
             iter = tcp_children.erase(iter);
+            delete tcp_child;
         } else {
             ++iter;
         }
