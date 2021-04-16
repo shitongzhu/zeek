@@ -60,9 +60,10 @@ bool Manager::ConnIndex::operator<(const ConnIndex& other) const
 	return false;
 	}
 
-Manager::Manager()
+Manager::Manager(bool robust)
 	: plugin::ComponentManager<analyzer::Tag, analyzer::Component>("Analyzer", "Tag")
 	{
+	robust_mode = robust;
 	}
 
 Manager::~Manager()
@@ -137,6 +138,7 @@ void Manager::DumpDebug()
 		}
 
 #endif
+	DBG_LOG(DBG_ANALYZER, "Robust mode: %s", robust_mode ? "On" : "Off");
 	}
 
 void Manager::Done()
@@ -372,7 +374,7 @@ bool Manager::BuildInitialAnalyzerTree(Connection* conn)
 
 	case TRANSPORT_TCP:
 		//root = tcp = new analyzer::tcp::TCP_Analyzer(conn);
-		root = tcp = new analyzer::tcp::TCP_FatherAnalyzer(conn);
+		root = tcp = new analyzer::tcp::TCP_FatherAnalyzer(conn, robust_mode);
 		pia = new analyzer::pia::PIA_TCP(conn);
 		check_port = true;
 		DBG_ANALYZER(conn, "activated TCP analyzer");

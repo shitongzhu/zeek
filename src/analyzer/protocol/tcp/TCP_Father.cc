@@ -1,9 +1,11 @@
-#include "zeek/analyzer/protocol/tcp/TCP.h"
+
 #include "zeek/analyzer/protocol/tcp/TCP_Father.h"
 
 #include <iostream>
 
 #include "zeek/analyzer/protocol/tcp/Ambiguity.h"
+#include "zeek/analyzer/protocol/tcp/TCP.h"
+#include "zeek/Sessions.h"
 
 
 namespace zeek::analyzer::tcp {
@@ -12,11 +14,18 @@ namespace zeek::analyzer::tcp {
  * Analyzer methods *
  ********************/
 
-TCP_FatherAnalyzer::TCP_FatherAnalyzer(Connection *conn)
+TCP_FatherAnalyzer::TCP_FatherAnalyzer(Connection *conn, bool robust)
 : TransportLayerAnalyzer("TCPFather", conn) 
 {
-    TCP_Analyzer *ta = new TCP_Analyzer(conn);
+    TCP_Analyzer *ta = new TCP_Analyzer(conn, this);
     tcp_children.push_back(ta);
+    robust_mode = robust;
+    if (!robust_mode) {
+        // set the ambiguity behaviors for non-robust mode
+        for (int ambiguity_id = 0; ambiguity_id < AMBI_MAX; ambiguity_id++) {
+            ta->ambiguity_behavior[ambiguity_id] = AMBI_BEHAV_OLD;
+        }
+    }
 }
 
 TCP_FatherAnalyzer::~TCP_FatherAnalyzer() 
@@ -55,25 +64,28 @@ void TCP_FatherAnalyzer::NextPacket(int len, const u_char* data, bool is_orig,
 
     for (TCP_Analyzer *tcp_child : tcp_children) {
         if (tcp_child->CheckAmbiguity(data, len, caplen, is_orig)) {
-            for (int ambiguity_id = 0; ambiguity_id < AMBI_MAX; ambiguity_id++) {
-                if (tcp_child->curr_pkt_ambiguities[ambiguity_id]) {
-                    std::cout << "State " << i << ": found ambiguity: " << ambiguity_id << "\n";
-                    if (tcp_child->ambiguity_behavior[ambiguity_id] == -1) {
-                        // fork
-                        std::cout << "Forking State " << i << "\n";
-                        TCP_Analyzer *new_tcp_child = Fork(tcp_child);
-                        new_tcp_children.push_back(new_tcp_child);
-                        
-                        // set ambiguity behavior
-                        // old
-                        for (int j = ambiguity_id; j < AMBI_MAX; j++) {
-                            assert(tcp_child->ambiguity_behavior[j] != AMBI_BEHAV_NEW);
-                            tcp_child->ambiguity_behavior[j] = AMBI_BEHAV_OLD;
-                        }
-                        // new
-                        for (int j = ambiguity_id; j >= 0; j--) {
-                            assert(new_tcp_child->ambiguity_behavior[j] != AMBI_BEHAV_OLD);
-                            new_tcp_child->ambiguity_behavior[j] = AMBI_BEHAV_NEW;
+            if (robust_mode) {
+                // fork TCP Analyzer if there's any ambiguities with undefined behaviors
+                for (int ambiguity_id = 0; ambiguity_id < AMBI_MAX; ambiguity_id++) {
+                    if (tcp_child->curr_pkt_ambiguities[ambiguity_id]) {
+                        std::cout << "State " << i << ": found ambiguity: " << ambiguity_id << "\n";
+                        if (tcp_child->ambiguity_behavior[ambiguity_id] == AMBI_BEHAV_UNDEF) {
+                            // fork
+                            std::cout << "Forking State " << i << "\n";
+                            TCP_Analyzer *tcp_child_forked = Fork(tcp_child);
+                            new_tcp_children.push_back(tcp_child_forked);
+                            
+                            // set ambiguity behavior
+                            // bind tcp_child to newer version, so older ambiguities should take new behaviors
+                            for (int j = ambiguity_id; j >= 0; j--) {
+                                assert(tcp_child->ambiguity_behavior[j] != AMBI_BEHAV_OLD);
+                                tcp_child->ambiguity_behavior[j] = AMBI_BEHAV_NEW;
+                            }
+                            // bind tcp_child_forked to older version, so newer ambiguities should take old behaviors
+                            for (int j = ambiguity_id; j < AMBI_MAX; j++) {
+                                assert(tcp_child_forked->ambiguity_behavior[j] != AMBI_BEHAV_NEW);
+                                tcp_child_forked->ambiguity_behavior[j] = AMBI_BEHAV_OLD;
+                            }
                         }
                     }
                 }
@@ -82,6 +94,7 @@ void TCP_FatherAnalyzer::NextPacket(int len, const u_char* data, bool is_orig,
         i++;
     }
 
+    // move newly forked tcp analyzers to tcp_children
     for (TCP_Analyzer *new_tcp_child : new_tcp_children) {
         tcp_children.push_back(new_tcp_child);
     }
@@ -175,11 +188,11 @@ bool TCP_FatherAnalyzer::Skipping() const
 
 bool TCP_FatherAnalyzer::IsFinished() const 
 {
-    bool finished = false;
+    bool finished = true;
     for (TCP_Analyzer *tcp_child : tcp_children) {
-        //finished |= tcp_child->IsFinsihed();
-        finished |= tcp_child->finished;
+        finished &= tcp_child->IsFinished();
     }
+    return finished;
 }
 
 bool TCP_FatherAnalyzer::Removing() const
@@ -199,6 +212,9 @@ bool TCP_FatherAnalyzer::RemoveChildAnalyzer(analyzer::ID id)
         } else {
             ++iter;
         }
+    }
+    if (tcp_children.empty()) {
+        sessions->Remove(Conn());
     }
 }
 

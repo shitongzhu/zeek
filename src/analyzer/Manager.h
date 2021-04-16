@@ -52,7 +52,7 @@ public:
 	/**
 	 * Constructor.
 	 */
-	Manager();
+	Manager(bool robust);
 
 	/**
 	 * Destructor.
@@ -398,6 +398,8 @@ private:
 	conns_map conns;
 	conns_queue conns_by_timeout;
 	std::vector<uint16_t> vxlan_ports;
+
+	bool robust_mode;
 };
 
 } // namespace analyzer

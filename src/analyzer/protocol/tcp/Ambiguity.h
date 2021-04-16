@@ -17,9 +17,9 @@ enum
 
 enum
 {
-    AMBI_BEHAV_OLD, /* Old behaviour in case the ambiguity is triggered -- 0 */
-    AMBI_BEHAV_NEW, /* New behaviour in case the ambiguity is triggered -- 1 */
-    AMBI_BEHAV_MAX /* Guard */
+    AMBI_BEHAV_UNDEF = -1, /* Undefined behaviour (initial value) -- -1 */
+    AMBI_BEHAV_OLD = 0, /* Old behaviour in case the ambiguity is triggered -- 0 */
+    AMBI_BEHAV_NEW = 1 /* New behaviour in case the ambiguity is triggered -- 1 */
 };
 
 

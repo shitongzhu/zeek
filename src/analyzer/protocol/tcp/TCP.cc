@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "zeek/analyzer/protocol/tcp/Ambiguity.h"
+#include "zeek/analyzer/protocol/tcp/TCP_Father.h"
 #include "zeek/analyzer/protocol/tcp/TCP_Reassembler.h"
 #include "zeek/analyzer/protocol/pia/PIA.h"
 
@@ -125,7 +126,7 @@ static RecordVal* build_syn_packet_val(bool is_orig, const IP_Hdr* ip,
 	}
 
 
-TCP_Analyzer::TCP_Analyzer(Connection* conn)
+TCP_Analyzer::TCP_Analyzer(Connection* conn, TCP_FatherAnalyzer* father)
 : TransportLayerAnalyzer("TCP", conn)
 	{
 	// Set a timer to eventually time out this connection.
@@ -151,8 +152,10 @@ TCP_Analyzer::TCP_Analyzer(Connection* conn)
 	for (int i = 0; i < AMBI_MAX; i++) 
 		{
 		curr_pkt_ambiguities.push_back(false);
-		ambiguity_behavior.push_back(-1);
+		ambiguity_behavior.push_back(AMBI_BEHAV_UNDEF);
 		}
+
+	tcp_father = father;
 	}
 
 TCP_Analyzer::TCP_Analyzer(TCP_Analyzer* ta)
@@ -196,6 +199,8 @@ TCP_Analyzer::TCP_Analyzer(TCP_Analyzer* ta)
 
 	curr_pkt_ambiguities = ta->curr_pkt_ambiguities;
 	ambiguity_behavior = ta->ambiguity_behavior;
+
+	tcp_father = ta->tcp_father;
 	}
 
 TCP_Analyzer::~TCP_Analyzer()
@@ -205,6 +210,36 @@ TCP_Analyzer::~TCP_Analyzer()
 
 	delete orig;
 	delete resp;
+	}
+
+void TCP_Analyzer::Reset()
+	{
+	CancelTimers();
+
+	EndpointEOF(orig->contents_processor);
+	EndpointEOF(resp->contents_processor);
+
+	// Set a timer to eventually time out this connection.
+	ADD_ANALYZER_TIMER(&TCP_Analyzer::ExpireTimer,
+	                   run_state::network_time + detail::tcp_SYN_timeout, false,
+	                   detail::TIMER_TCP_EXPIRE);
+
+	deferred_gen_event = close_deferred = 0;
+
+	seen_first_ACK = 0;
+	is_active = 1;
+	finished = 0;
+	reassembling = 0;
+	first_packet_seen = 0;
+	is_partial = 0;
+
+	orig = new TCP_Endpoint(this, true);
+	resp = new TCP_Endpoint(this, false);
+
+	orig->SetPeer(resp);
+	resp->SetPeer(orig);
+
+	EnableReassembly();
 	}
 
 void TCP_Analyzer::Init()
@@ -974,9 +1009,9 @@ static void init_endpoint(TCP_Endpoint* endpoint, TCP_Flags flags,
 		if ( flags.SYN() && first_seg_seq != endpoint->StartSeq() )
 			{
 			endpoint->Conn()->Weird("SYN_seq_jump");
-			endpoint->InitStartSeq(first_seg_seq);
-			endpoint->InitAckSeq(first_seg_seq);
-			endpoint->InitLastSeq(last_seq);
+			//endpoint->InitStartSeq(first_seg_seq);
+			//endpoint->InitAckSeq(first_seg_seq);
+			//endpoint->InitLastSeq(last_seq);
 			}
 		break;
 
@@ -992,16 +1027,16 @@ static void init_endpoint(TCP_Endpoint* endpoint, TCP_Flags flags,
 
 			// Make a guess that somehow the connection didn't get established,
 			// and this SYN will be the one that actually sets it up.
-			endpoint->InitStartSeq(first_seg_seq);
-			endpoint->InitAckSeq(first_seg_seq);
-			endpoint->InitLastSeq(last_seq);
+			//endpoint->InitStartSeq(first_seg_seq);
+			//endpoint->InitAckSeq(first_seg_seq);
+			//endpoint->InitLastSeq(last_seq);
 			}
 		break;
 
 	case TCP_ENDPOINT_RESET:
 		if ( flags.SYN() )
 			{
-			if ( endpoint->prev_state == TCP_ENDPOINT_INACTIVE )
+			//if ( endpoint->prev_state == TCP_ENDPOINT_INACTIVE )
 				{
 				// Seq. numbers were initialized by a RST packet from this
 				// endpoint, but now that a SYN is seen from it, that could mean
@@ -1109,9 +1144,9 @@ bool TCP_Analyzer::IsSYNFINPacketInLISTEN(const struct tcphdr* tp, bool is_orig)
 		return false;
 
         if ( flags.SYN() && flags.FIN() && endpoint->state == TCP_ENDPOINT_INACTIVE )
-                return true;
+		return true;
 
-        return false;
+	return false;
         }
 
 // Note that since we currenly handle ambiguities BEFORE updating endpoint's 
@@ -1125,16 +1160,13 @@ bool TCP_Analyzer::IsInWindowPacket(const struct tcphdr* tp, bool is_orig)
 	if ( !endpoint )
 		return false;
 
-        uint32_t window_left_abs = endpoint->window_seq;
-	uint32_t window_left = endpoint->ToRelativeSeqSpace(window_left_abs, endpoint->SeqWraps());
-        uint32_t window_right = window_left + endpoint->window;
-	uint32_t pkt_seq = (uint32_t) ntohl(tp->th_seq);
-	uint32_t seq = endpoint->ToRelativeSeqSpace(pkt_seq, endpoint->SeqWraps());
+	uint32_t seq = (uint32_t) ntohl(tp->th_seq);
+	int32_t delta = seq_delta(seq, endpoint->window_seq);
 	
-        if ( window_left <= seq && seq <= window_right )
-                return true;
+        if ( delta >= 0 && delta < endpoint->window )
+		return true;
 
-        return false;
+	return false;
         }
 
 bool TCP_Analyzer::IsSEQEqualToRcvNxt(const struct tcphdr* tp, bool is_orig)
@@ -1145,11 +1177,9 @@ bool TCP_Analyzer::IsSEQEqualToRcvNxt(const struct tcphdr* tp, bool is_orig)
 	if ( !endpoint )
 		return false;
 	
-	uint32_t rcv_nxt = endpoint->window_seq;
-	uint32_t pkt_seq = (uint32_t) ntohl(tp->th_seq);
-	uint32_t seq = endpoint->ToRelativeSeqSpace(pkt_seq, endpoint->SeqWraps());
+	uint32_t seq = (uint32_t) ntohl(tp->th_seq);
 
-	if ( seq == rcv_nxt )
+	if ( seq == endpoint->window_seq )
 		return true;
 	
 	return false;
@@ -1168,11 +1198,11 @@ bool TCP_Analyzer::IsInWindowSYNPacketInESTABLISHED(const struct tcphdr* tp, boo
 	if ( !endpoint->HasUpdatedInitSeq() )
 		return false;
 
-        if ( IsInWindowPacket(tp, is_orig) && flags.SYN() && 
+        if ( flags.SYN() && IsInWindowPacket(tp, is_orig) &&
 	     endpoint->state == TCP_ENDPOINT_ESTABLISHED )
-                return true;
+		return true;
 
-        return false;
+	return false;
         }
 
 bool TCP_Analyzer::IsInWindowRSTPacketInESTABLISHED(const struct tcphdr* tp, bool is_orig)
@@ -1188,11 +1218,11 @@ bool TCP_Analyzer::IsInWindowRSTPacketInESTABLISHED(const struct tcphdr* tp, boo
 	if ( !endpoint->HasUpdatedInitSeq() )
 		return false;
 
-        if ( IsInWindowPacket(tp, is_orig) && !IsSEQEqualToRcvNxt(tp, is_orig), 
-	     flags.RST() && endpoint->state == TCP_ENDPOINT_ESTABLISHED )
-                return true;
+        if ( flags.RST() && IsInWindowPacket(tp, is_orig) && !IsSEQEqualToRcvNxt(tp, is_orig) &&
+	     endpoint->state == TCP_ENDPOINT_ESTABLISHED )
+		return true;
 
-        return false;
+	return false;
         }
 
 bool TCP_Analyzer::IsNoACKPacketInESTABLISHED(const struct tcphdr* tp, bool is_orig, int len)
@@ -1205,9 +1235,9 @@ bool TCP_Analyzer::IsNoACKPacketInESTABLISHED(const struct tcphdr* tp, bool is_o
 		return false;
 
         if ( !flags.ACK() && endpoint->state == TCP_ENDPOINT_ESTABLISHED && (len > 0))
-                return true;
+		return true;
 
-        return false;
+	return false;
         }
 
 bool TCP_Analyzer::IsRSTPacketInESTABLISHED(const struct tcphdr* tp, bool is_orig)
@@ -1220,9 +1250,9 @@ bool TCP_Analyzer::IsRSTPacketInESTABLISHED(const struct tcphdr* tp, bool is_ori
 		return false;
 
         if ( flags.RST() && endpoint->state == TCP_ENDPOINT_ESTABLISHED )
-                return true;
+		return true;
 
-        return false;
+	return false;
         }
 
 bool TCP_Analyzer::IsSYNPacketInESTABLISHED(const struct tcphdr* tp, bool is_orig)
@@ -1235,9 +1265,9 @@ bool TCP_Analyzer::IsSYNPacketInESTABLISHED(const struct tcphdr* tp, bool is_ori
 		return false;
 
         if ( flags.SYN() && endpoint->state == TCP_ENDPOINT_ESTABLISHED )
-                return true;
+		return true;
 
-        return false;
+	return false;
         }
 
 bool TCP_Analyzer::IsRSTPacketWithSEQOfRightmostSACK(const struct tcphdr* tp, bool is_orig)
@@ -1256,7 +1286,7 @@ bool TCP_Analyzer::IsRSTPacketWithSEQOfRightmostSACK(const struct tcphdr* tp, bo
 	if ( flags.RST() && seq == rightmost_sack )
 		return true;
 
-        return false;
+	return false;
         }
 
 void TCP_Analyzer::DeliverPacket(int len, const u_char* data, bool is_orig,
@@ -1319,28 +1349,12 @@ void TCP_Analyzer::DeliverPacket(int len, const u_char* data, bool is_orig,
 			// old behavior: reset the connection
 			DBG_LOG(DBG_ANALYZER, "%s AMBI_IN_WINDOW_SYN. Old behavior: reset the connection.",
 			        fmt_analyzer(this).c_str());
+			Reset();
 			}
 		else if ( ambiguity_behavior[AMBI_IN_WINDOW_SYN] == AMBI_BEHAV_NEW )
 			{
 			// new behavior: discard the packet and send challenge ACK (not implemented)
 			DBG_LOG(DBG_ANALYZER, "%s AMBI_IN_WINDOW_SYN. New behavior: discard.",
-			        fmt_analyzer(this).c_str());
-			return;
-			}
-		}
-	
-	if ( curr_pkt_ambiguities[AMBI_IN_WINDOW_RST] ) 
-		{
-		if ( ambiguity_behavior[AMBI_IN_WINDOW_RST] == AMBI_BEHAV_OLD )
-			{
-			// old behavior: reset the connection
-			DBG_LOG(DBG_ANALYZER, "%s AMBI_IN_WINDOW_RST. Old behavior: reset the connection.",
-			        fmt_analyzer(this).c_str());
-			}
-		else if ( ambiguity_behavior[AMBI_IN_WINDOW_RST] == AMBI_BEHAV_NEW )
-			{
-			// new behavior: discard the packet and send challenge ACK (not implemented)
-			DBG_LOG(DBG_ANALYZER, "%s AMBI_IN_WINDOW_RST. New behavior: discard.",
 			        fmt_analyzer(this).c_str());
 			return;
 			}
@@ -1363,7 +1377,51 @@ void TCP_Analyzer::DeliverPacket(int len, const u_char* data, bool is_orig,
 			}
 		}
 	
-	if ( curr_pkt_ambiguities[AMBI_RST_RIGHTMOST_SACK] ) 
+	// IN_WINDOW_RST and RST_RIGHTMOST_SACK can occur at the same time,
+	// because RST with SEQ == rightmost SACK is also a RST with SEQ in window.
+	// We need to handle this carefully.
+	if ( curr_pkt_ambiguities[AMBI_IN_WINDOW_RST] && curr_pkt_ambiguities[AMBI_RST_RIGHTMOST_SACK] ) 
+		{
+		if ( ambiguity_behavior[AMBI_IN_WINDOW_RST] == AMBI_BEHAV_OLD && ambiguity_behavior[AMBI_RST_RIGHTMOST_SACK] == AMBI_BEHAV_OLD )
+			{
+			// old behavior: reset the connection
+			DBG_LOG(DBG_ANALYZER, "%s AMBI_IN_WINDOW_RST and AMBI_RST_RIGHTMOST_SACK. Old behavior: reset the connection.",
+			        fmt_analyzer(this).c_str());
+			Reset();
+			}
+		else if ( ambiguity_behavior[AMBI_IN_WINDOW_RST] == AMBI_BEHAV_NEW && ambiguity_behavior[AMBI_RST_RIGHTMOST_SACK] == AMBI_BEHAV_OLD )
+			{
+			// middle behavior: discard
+			DBG_LOG(DBG_ANALYZER, "%s AMBI_IN_WINDOW_RST and AMBI_RST_RIGHTMOST_SACK. Middle behavior: discard.",
+			        fmt_analyzer(this).c_str());
+			return;
+			}
+		else if ( ambiguity_behavior[AMBI_IN_WINDOW_RST] == AMBI_BEHAV_NEW && ambiguity_behavior[AMBI_RST_RIGHTMOST_SACK] == AMBI_BEHAV_NEW )
+			{
+			// new behavior: reset the connection
+			DBG_LOG(DBG_ANALYZER, "%s AMBI_IN_WINDOW_RST and AMBI_RST_RIGHTMOST_SACK. New behavior: reset the connection.",
+			        fmt_analyzer(this).c_str());
+			Reset();
+			}
+		}
+	else if ( curr_pkt_ambiguities[AMBI_IN_WINDOW_RST] )
+		{
+		if ( ambiguity_behavior[AMBI_IN_WINDOW_RST] == AMBI_BEHAV_OLD )
+			{
+			// old behavior: reset the connection
+			DBG_LOG(DBG_ANALYZER, "%s AMBI_IN_WINDOW_RST. Old behavior: reset the connection.",
+				fmt_analyzer(this).c_str());
+			Reset();
+			}
+		else if ( ambiguity_behavior[AMBI_IN_WINDOW_RST] == AMBI_BEHAV_NEW )
+			{
+			// new behavior: discard the packet and send challenge ACK (not implemented)
+			DBG_LOG(DBG_ANALYZER, "%s AMBI_IN_WINDOW_RST. New behavior: discard.",
+				fmt_analyzer(this).c_str());
+			return;
+			}
+		}
+	else if ( curr_pkt_ambiguities[AMBI_RST_RIGHTMOST_SACK] ) 
 		{
 		if ( ambiguity_behavior[AMBI_RST_RIGHTMOST_SACK] == AMBI_BEHAV_OLD )
 			{
@@ -1377,6 +1435,7 @@ void TCP_Analyzer::DeliverPacket(int len, const u_char* data, bool is_orig,
 			// new behavior: accept the packet and send challenge ACK (not imeplemented)
 			DBG_LOG(DBG_ANALYZER, "%s AMBI_RST_RIGHTMOST_SACK. New behavior: reset the connection.",
 			        fmt_analyzer(this).c_str());
+			Reset();
 			}
 		}
 
@@ -1385,6 +1444,25 @@ void TCP_Analyzer::DeliverPacket(int len, const u_char* data, bool is_orig,
 
 	uint32_t tcp_hdr_len = data - (const u_char*) tp;
 	TCP_Flags flags(tp);
+
+	if ( flags.SYN() && endpoint->state != TCP_ENDPOINT_INACTIVE )
+		// discard SYN packets unless in LISTEN state
+		return;
+
+	if ( flags.RST() ) 
+		{
+		if ( endpoint->state == TCP_ENDPOINT_INACTIVE ||
+				endpoint->state == TCP_ENDPOINT_RESET )
+			return;
+
+		uint32_t base_seq = ntohl(tp->th_seq);
+		if ( base_seq == endpoint->LastSeq() )
+			// SEQ == rcv_nxt
+			Reset();
+		else
+			return;
+		}
+
 	SetPartialStatus(flags, endpoint->IsOrig());
 
 	uint32_t base_seq = ntohl(tp->th_seq);
@@ -1408,7 +1486,6 @@ void TCP_Analyzer::DeliverPacket(int len, const u_char* data, bool is_orig,
 		Weird("TCP_seq_underflow_or_misorder");
 
 	update_history(flags, endpoint, rel_seq, len);
-	update_window(endpoint, ntohs(tp->th_win), base_seq, ack_seq, flags);
 
 	if ( ! orig->did_close || ! resp->did_close )
 		Conn()->SetLastTime(run_state::current_timestamp);
@@ -1418,7 +1495,7 @@ void TCP_Analyzer::DeliverPacket(int len, const u_char* data, bool is_orig,
 		SynWeirds(flags, endpoint, len);
 		RecordVal* SYN_vals = build_syn_packet_val(is_orig, ip, tp);
 		init_window(endpoint, peer, flags, SYN_vals->GetField(5)->CoerceToInt(),
-		            base_seq, ack_seq);
+		            base_seq + 1, ack_seq);
 
 		if ( connection_SYN_packet )
 			EnqueueConnEvent(connection_SYN_packet,
@@ -1428,6 +1505,9 @@ void TCP_Analyzer::DeliverPacket(int len, const u_char* data, bool is_orig,
 
 		Unref(SYN_vals);
 		}
+
+	DBG_LOG(DBG_ANALYZER, "%s %s current receive window: window_seq = %u, window_ack_seq = %u, window = %u.",
+		fmt_analyzer(this).c_str(), is_orig ? "Orig" : "Resp", endpoint->window_seq, endpoint->window_ack_seq, endpoint->window);
 
 	if ( flags.FIN() )
 		{
@@ -1534,6 +1614,8 @@ void TCP_Analyzer::DeliverPacket(int len, const u_char* data, bool is_orig,
 	     ! flags.RST() && ! Skipping() && ! seq_underflow )
 		need_contents = DeliverData(run_state::current_timestamp, data, len, caplen, ip,
 		                            tp, endpoint, rel_data_seq, is_orig, flags);
+
+	update_window(endpoint, ntohs(tp->th_win), endpoint->StartSeq() + endpoint->contents_processor->LastReassemSeq(), ack_seq, flags);
 
 	endpoint->CheckEOF();
 
@@ -1798,7 +1880,10 @@ void TCP_Analyzer::AttemptTimer(double /* t */)
 		is_active = 0;
 
 		// All done with this connection.
-		sessions->Remove(Conn());
+		if (tcp_father)
+			tcp_father->RemoveChildAnalyzer(GetID());
+		else
+			sessions->Remove(Conn());
 		}
 	}
 
@@ -1818,7 +1903,10 @@ void TCP_Analyzer::PartialCloseTimer(double /* t */)
 			return;
 
 		Event(connection_partial_close);
-		sessions->Remove(Conn());
+		if (tcp_father)
+			tcp_father->RemoveChildAnalyzer(GetID());
+		else
+			sessions->Remove(Conn());
 		}
 	}
 
@@ -1848,7 +1936,10 @@ void TCP_Analyzer::ExpireTimer(double t)
 				// the session remove and Unref() us here.
 				Event(connection_timeout);
 				is_active = 0;
-				sessions->Remove(Conn());
+				if (tcp_father)
+					tcp_father->RemoveChildAnalyzer(GetID());
+				else
+					sessions->Remove(Conn());
 				return;
 				}
 			}
@@ -1863,7 +1954,10 @@ void TCP_Analyzer::ExpireTimer(double t)
 				// before setting up an attempt timer,
 				// so we need to clean it up here.
 				Event(connection_timeout);
-				sessions->Remove(Conn());
+				if (tcp_father)
+					tcp_father->RemoveChildAnalyzer(GetID());
+				else
+					sessions->Remove(Conn());
 				return;
 				}
 			}
@@ -1884,12 +1978,18 @@ void TCP_Analyzer::ResetTimer(double /* t */)
 	if ( ! BothClosed() )
 		ConnectionReset();
 
-	sessions->Remove(Conn());
+	if (tcp_father)
+		tcp_father->RemoveChildAnalyzer(GetID());
+	else
+		sessions->Remove(Conn());
 	}
 
 void TCP_Analyzer::DeleteTimer(double /* t */)
 	{
-	sessions->Remove(Conn());
+	if (tcp_father)
+		tcp_father->RemoveChildAnalyzer(GetID());
+	else
+		sessions->Remove(Conn());
 	}
 
 void TCP_Analyzer::ConnDeleteTimer(double t)
@@ -2130,6 +2230,9 @@ void TCP_Analyzer::PacketWithRST()
 
 bool TCP_Analyzer::IsReuse(double t, const u_char* pkt)
 	{
+	// wzj: disable reuse, otherwise it's so easy to evade (by sending a SYN in ESTABLISHED state)
+	return false;
+
 	const struct tcphdr* tp = (const struct tcphdr*) pkt;
 
 	if ( unsigned(tp->th_off) < sizeof(struct tcphdr) / 4 )

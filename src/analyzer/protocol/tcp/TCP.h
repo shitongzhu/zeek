@@ -21,15 +21,19 @@ ZEEK_FORWARD_DECLARE_NAMESPACED(TCP_ApplicationAnalyzer, zeek, analyzer::tcp);
 
 namespace zeek::analyzer::tcp {
 
+class TCP_FatherAnalyzer;
+
 class TCP_Analyzer final : public analyzer::TransportLayerAnalyzer {
 public:
-	explicit TCP_Analyzer(Connection* conn);
+	explicit TCP_Analyzer(Connection* conn, TCP_FatherAnalyzer* father = nullptr);
 	~TCP_Analyzer() override;
  
 	//Pengxiong's code
 	TCP_Analyzer(TCP_Analyzer* tcp);
 
 	Analyzer* Clone() override { return new TCP_Analyzer(this); }
+
+	void Reset();
 
 	virtual void EnableReassembly();
 
@@ -221,6 +225,8 @@ private:
 	// wzj
 	std::vector<bool> curr_pkt_ambiguities;
 	std::vector<int> ambiguity_behavior;
+
+	TCP_FatherAnalyzer* tcp_father;
 };
 
 class TCP_ApplicationAnalyzer : public analyzer::Analyzer {

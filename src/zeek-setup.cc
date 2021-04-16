@@ -590,7 +590,7 @@ SetupResult setup(int argc, char** argv, Options* zopts)
 
 	iosource_mgr = new iosource::Manager();
 	event_registry = new EventRegistry();
-	analyzer_mgr = new analyzer::Manager();
+	analyzer_mgr = new analyzer::Manager(options.robust_mode);
 	packet_mgr = new packet_analysis::Manager();
 	log_mgr = new logging::Manager();
 	input_mgr = new input::Manager();
