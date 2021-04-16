@@ -9,7 +9,7 @@ namespace zeek::analyzer::tcp {
 
 class TCP_FatherAnalyzer final : public analyzer::TransportLayerAnalyzer {
 public:
-    explicit TCP_FatherAnalyzer(Connection *conn);
+    explicit TCP_FatherAnalyzer(Connection *conn, bool robust = true);
     ~TCP_FatherAnalyzer() override;
 
     /* Analyzer methods */
@@ -118,12 +118,14 @@ public:
     void AddChildPacketAnalyzer(Analyzer *analyzer);
 
     static analyzer::Analyzer* Instantiate(Connection* conn)
-        { return new TCP_FatherAnalyzer(conn); }
+        { printf("BIBIBIBIBIBIBI.\n"); return new TCP_FatherAnalyzer(conn); }
 
 private:
     TCP_Analyzer* Fork(TCP_Analyzer *ta);
 
     std::vector<TCP_Analyzer*> tcp_children;
+
+    bool robust_mode;
 };
 
 

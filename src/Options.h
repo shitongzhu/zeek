@@ -76,6 +76,8 @@ struct Options {
 	std::vector<std::string> script_options_to_set;
 
 	std::vector<std::string> script_args;
+
+	bool robust_mode = false;
 };
 
 /**

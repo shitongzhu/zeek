@@ -106,6 +106,7 @@ void usage(const char* prog, int code)
 	fprintf(stderr, "    -N|--print-plugins             | print available plugins and exit (-NN for verbose)\n");
 	fprintf(stderr, "    -P|--prime-dns                 | prime DNS\n");
 	fprintf(stderr, "    -Q|--time                      | print execution time summary to stderr\n");
+	fprintf(stderr, "    -R|--robust-mode               | Robust mode (fork connection states upon ambiguities)\n");
 	fprintf(stderr, "    -S|--debug-rules               | enable rule debugging\n");
 	fprintf(stderr, "    -T|--re-level <level>          | set 'RE_level' for rules\n");
 	fprintf(stderr, "    -U|--status-file <file>        | Record process status in file\n");
@@ -254,6 +255,7 @@ Options parse_cmdline(int argc, char** argv)
 		{"print-plugins",	no_argument,		nullptr,	'N'},
 		{"prime-dns",		no_argument,		nullptr,	'P'},
 		{"time",		no_argument,		nullptr,	'Q'},
+		{"robust-mode",		no_argument,		nullptr,	'R'},
 		{"debug-rules",		no_argument,		nullptr,	'S'},
 		{"re-level",		required_argument,	nullptr,	'T'},
 		{"watchdog",		no_argument,		nullptr,	'W'},
@@ -279,7 +281,7 @@ Options parse_cmdline(int argc, char** argv)
 	};
 
 	char opts[256];
-	util::safe_strncpy(opts, "B:e:f:G:H:I:i:j::n:p:r:s:T:t:U:w:X:CDFNPQSWabdhv",
+	util::safe_strncpy(opts, "B:e:f:G:H:I:i:j::n:p:r:s:T:t:U:w:X:CDFNPQRSWabdhv",
 	                         sizeof(opts));
 
 #ifdef USE_PERFTOOLS_DEBUG
@@ -408,6 +410,9 @@ Options parse_cmdline(int argc, char** argv)
 			break;
 		case 'Q':
 			rval.print_execution_time = true;
+			break;
+		case 'R':
+			rval.robust_mode = true;
 			break;
 		case 'S':
 			rval.print_signature_debug_info = true;
