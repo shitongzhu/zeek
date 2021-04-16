@@ -52,7 +52,8 @@ void TCP_FatherAnalyzer::Done()
     TransportLayerAnalyzer::Done();
 
     for (TCP_Analyzer *tcp_child : tcp_children) {
-        tcp_child->Done();
+        if (!tcp_child->IsFinished())
+            tcp_child->Done();
     }
 }
 
@@ -186,13 +187,13 @@ bool TCP_FatherAnalyzer::Skipping() const
     assert(false);
 }
 
-bool TCP_FatherAnalyzer::IsFinished() const 
+bool TCP_FatherAnalyzer::IsAllChildFinished() const 
 {
-    bool finished = true;
+    bool ret = true;
     for (TCP_Analyzer *tcp_child : tcp_children) {
-        finished &= tcp_child->IsFinished();
+        ret &= tcp_child->IsFinished();
     }
-    return finished;
+    return ret;
 }
 
 bool TCP_FatherAnalyzer::Removing() const
@@ -203,20 +204,19 @@ bool TCP_FatherAnalyzer::Removing() const
 
 bool TCP_FatherAnalyzer::RemoveChildAnalyzer(analyzer::ID id)
 {
-    for (auto iter = tcp_children.begin(); iter != tcp_children.end(); ) {
+    bool found = false;
+    for (auto iter = tcp_children.begin(); iter != tcp_children.end(); ++iter) {
         TCP_Analyzer *tcp_child = *iter;
         if (tcp_child->GetID() == id) {
             if (!tcp_child->IsFinished())
                 tcp_child->Done();
-            iter = tcp_children.erase(iter);
-            delete tcp_child;
-        } else {
-            ++iter;
+            found = true;
         }
     }
-    if (tcp_children.empty()) {
+    if (IsAllChildFinished()) {
         sessions->Remove(Conn());
     }
+    return found;
 }
 
 bool TCP_FatherAnalyzer::HasChildAnalyzer(Tag tag)

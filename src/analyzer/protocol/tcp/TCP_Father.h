@@ -7,7 +7,7 @@
 
 namespace zeek::analyzer::tcp {
 
-class TCP_FatherAnalyzer final : public analyzer::TransportLayerAnalyzer {
+class TCP_FatherAnalyzer final : public TransportLayerAnalyzer {
 public:
     explicit TCP_FatherAnalyzer(Connection *conn, bool robust = true);
     ~TCP_FatherAnalyzer() override;
@@ -49,7 +49,7 @@ public:
 
     bool Skipping() const override;
 
-    bool IsFinished() const override;
+    bool IsAllChildFinished() const;
 
     bool Removing() const override;
 
