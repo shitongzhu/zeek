@@ -121,6 +121,10 @@ Connection::Connection(NetSessions* s, const detail::ConnIDKey& k, double t,
 		encapsulation = std::make_unique<EncapsulationStack>(*arg_encap);
 	else
 		encapsulation = nullptr;
+
+	// ZST: Robust-NIDS
+	// Mark the begining of the connection
+	printf("CONN_BEGIN\n");
 	}
 
 #pragma GCC diagnostic push
@@ -146,6 +150,10 @@ Connection::~Connection()
 	delete root_analyzer;
 
 	--current_connections;
+
+	// ZST: Robust-NIDS
+	// Mark the teardown of the connection
+	printf("CONN_ENDED\n");
 	}
 
 void Connection::CheckEncapsulation(const std::shared_ptr<EncapsulationStack>& arg_encap)
