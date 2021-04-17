@@ -2222,6 +2222,7 @@ DNS_Analyzer::~DNS_Analyzer()
 
 void DNS_Analyzer::Init()
 	{
+	analyzer::tcp::TCP_ApplicationAnalyzer::Init();
 	}
 
 void DNS_Analyzer::Done()

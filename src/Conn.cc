@@ -5,6 +5,7 @@
 
 #include <ctype.h>
 #include <binpac.h>
+#include <sstream>
 
 #include "zeek/Desc.h"
 #include "zeek/RunState.h"
@@ -133,7 +134,7 @@ Connection::Connection(NetSessions* s, const detail::ConnIDKey& k, double t,
 
 void Connection::InitAmbiguityCount()
 	{
-	for ( int i = 0; i < analyzer::tcp::NUM_AMBIGUITIES; i++ )
+	for ( int i = 0; i < analyzer::tcp::AMBI_MAX; i++ )
 		{
 		encountered_ambiguities.push_back(false);
 		}
@@ -146,21 +147,25 @@ void Connection::RegisterAmbiguity(const int id)
 
 void Connection::PrintAmbiguities()
 	{
-	bool has_any_ambiguity = false;
-	printf("[AMBIGUITY_COUNT]");
-	for ( int i = 0; i < analyzer::tcp::NUM_AMBIGUITIES; i++ )
+	bool has_ambi = false;
+	std::stringstream ss;
+	for ( int i = 0; i < analyzer::tcp::AMBI_MAX; i++ )
 		{
-		bool ambiguity = encountered_ambiguities[i];
-		if ( ambiguity )
+		if ( encountered_ambiguities[i] )
 			{
-			printf("%d", i);
-			has_any_ambiguity = true;
+			if ( has_ambi )
+				ss << ", " << i;
+			else
+				ss << i;
+			has_ambi = true;
 			}
 		}
-	if ( ! has_any_ambiguity )
-		printf("-1");
-	printf(",%d", total_connections);
-	printf("\n");
+	printf("[AMBIGUITY_COUNT] %s, %ld\n", ss.str().c_str(), total_connections);
+	if ( has_ambi )
+		DBG_LOG(DBG_ANALYZER, "%s has ambiguity: %s", 
+				fmt_conn_id(OrigAddr(), ntohs(OrigPort()),
+					RespAddr(), ntohs(RespPort())),
+				ss.str().c_str());
 	}
 
 #pragma GCC diagnostic push

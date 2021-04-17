@@ -1143,7 +1143,7 @@ bool TCP_Analyzer::IsSYNFINPacketInLISTEN(const struct tcphdr* tp, bool is_orig)
 	if ( !endpoint )
 		return false;
 
-        if ( flags.SYN() && flags.FIN() && endpoint->state == TCP_ENDPOINT_INACTIVE )
+        if ( flags.SYN() && flags.FIN() && !flags.RST() && !flags.ACK() && endpoint->state == TCP_ENDPOINT_INACTIVE )
 		return true;
 
 	return false;
@@ -1283,7 +1283,7 @@ bool TCP_Analyzer::IsRSTPacketWithSEQOfRightmostSACK(const struct tcphdr* tp, bo
 	uint32_t seq = endpoint->ToRelativeSeqSpace(pkt_seq, endpoint->SeqWraps());
 	uint32_t rightmost_sack = endpoint->GetRightmostSACK();
 
-	if ( flags.RST() && seq == rightmost_sack )
+	if ( flags.RST() && !IsSEQEqualToRcvNxt(tp, orig) && seq == rightmost_sack )
 		return true;
 
 	return false;
@@ -1439,28 +1439,34 @@ void TCP_Analyzer::DeliverPacket(int len, const u_char* data, bool is_orig,
 			}
 		}
 
-	if ( ! ValidateChecksum(ip, tp, endpoint, len, caplen) )
-		return;
+	// since we refilled truncated payload, the checksum is wrong
+	//if ( ! ValidateChecksum(ip, tp, endpoint, len, caplen) )
+	//	return;
 
 	uint32_t tcp_hdr_len = data - (const u_char*) tp;
 	TCP_Flags flags(tp);
 
-	if ( flags.SYN() && endpoint->state != TCP_ENDPOINT_INACTIVE )
-		// discard SYN packets unless in LISTEN state
-		return;
-
-	if ( flags.RST() ) 
+	// validate TCP flags
+	if ( endpoint->state == TCP_ENDPOINT_INACTIVE || endpoint->state == TCP_ENDPOINT_RESET )
 		{
-		if ( endpoint->state == TCP_ENDPOINT_INACTIVE ||
-				endpoint->state == TCP_ENDPOINT_RESET )
+		if ( flags.RST() )
+			return;
+		}
+	else 
+		{
+		if ( flags.SYN() )
+			// discard SYN packets unless in LISTEN state
 			return;
 
-		uint32_t base_seq = ntohl(tp->th_seq);
-		if ( base_seq == endpoint->LastSeq() )
-			// SEQ == rcv_nxt
-			Reset();
-		else
-			return;
+		if ( flags.RST() )
+			{
+			uint32_t base_seq = ntohl(tp->th_seq);
+			if ( base_seq == endpoint->LastSeq() )
+				// SEQ == rcv_nxt
+				Reset();
+			else
+				return;
+			}
 		}
 
 	SetPartialStatus(flags, endpoint->IsOrig());
