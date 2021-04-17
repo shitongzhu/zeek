@@ -1439,8 +1439,9 @@ void TCP_Analyzer::DeliverPacket(int len, const u_char* data, bool is_orig,
 			}
 		}
 
-	if ( ! ValidateChecksum(ip, tp, endpoint, len, caplen) )
-		return;
+	// since we refilled truncated payload, the checksum is wrong
+	//if ( ! ValidateChecksum(ip, tp, endpoint, len, caplen) )
+	//	return;
 
 	uint32_t tcp_hdr_len = data - (const u_char*) tp;
 	TCP_Flags flags(tp);

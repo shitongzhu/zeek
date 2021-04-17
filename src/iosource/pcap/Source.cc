@@ -226,7 +226,18 @@ bool PcapSource::ExtractNextPacket(Packet* pkt)
 		return false;
 	}
 
-	pkt->Init(props.link_type, &header->ts, header->caplen, header->len, data);
+	if ( header->len > header->caplen )
+		{
+		// payload truncated. fill in the payload with junk data
+		const u_char* data2 = new u_char[header->len];
+		memcpy(const_cast<u_char *>(data2), data, header->caplen);
+		memset(const_cast<u_char *>(data2 + header->caplen), 'A', header->len - header->caplen);
+		header->caplen = header->len;
+		pkt->Init(props.link_type, &header->ts, header->caplen, header->len, data2, true);
+		delete [] data2;
+		}
+	else
+		pkt->Init(props.link_type, &header->ts, header->caplen, header->len, data);
 
 	if ( header->len == 0 || header->caplen == 0 )
 		{
