@@ -1143,7 +1143,7 @@ bool TCP_Analyzer::IsSYNFINPacketInLISTEN(const struct tcphdr* tp, bool is_orig)
 	if ( !endpoint )
 		return false;
 
-        if ( flags.SYN() && flags.FIN() && endpoint->state == TCP_ENDPOINT_INACTIVE )
+        if ( flags.SYN() && flags.FIN() && !flags.RST() && !flags.ACK() && endpoint->state == TCP_ENDPOINT_INACTIVE )
 		return true;
 
 	return false;
@@ -1445,14 +1445,16 @@ void TCP_Analyzer::DeliverPacket(int len, const u_char* data, bool is_orig,
 	uint32_t tcp_hdr_len = data - (const u_char*) tp;
 	TCP_Flags flags(tp);
 
-	if ( flags.SYN() && endpoint->state != TCP_ENDPOINT_INACTIVE )
-		// discard SYN packets unless in LISTEN state
-		return;
-
-	if ( flags.RST() ) 
+	// validate TCP flags
+	if ( endpoint->state == TCP_ENDPOINT_INACTIVE || endpoint->state == TCP_ENDPOINT_RESET )
 		{
-		if ( endpoint->state == TCP_ENDPOINT_INACTIVE ||
-				endpoint->state == TCP_ENDPOINT_RESET )
+		if ( flags.RST() )
+			return;
+		}
+	else 
+		{
+		if ( flags.SYN() )
+			// discard SYN packets unless in LISTEN state
 			return;
 
 		uint32_t base_seq = ntohl(tp->th_seq);
