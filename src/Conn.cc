@@ -146,13 +146,19 @@ void Connection::RegisterAmbiguity(const int id)
 
 void Connection::PrintAmbiguities()
 	{
+	bool has_any_ambiguity = false;
 	printf("[AMBIGUITY_COUNT]");
 	for ( int i = 0; i < analyzer::tcp::NUM_AMBIGUITIES; i++ )
 		{
 		bool ambiguity = encountered_ambiguities[i];
 		if ( ambiguity )
+			{
 			printf("%d", i);
+			has_any_ambiguity = true;
+			}
 		}
+	if ( ! has_any_ambiguity )
+		printf("-1");
 	printf(",%d", total_connections);
 	printf("\n");
 	}
