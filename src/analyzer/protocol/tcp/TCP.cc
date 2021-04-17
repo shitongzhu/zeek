@@ -1457,12 +1457,15 @@ void TCP_Analyzer::DeliverPacket(int len, const u_char* data, bool is_orig,
 			// discard SYN packets unless in LISTEN state
 			return;
 
-		uint32_t base_seq = ntohl(tp->th_seq);
-		if ( base_seq == endpoint->LastSeq() )
-			// SEQ == rcv_nxt
-			Reset();
-		else
-			return;
+		if ( flags.RST() )
+			{
+			uint32_t base_seq = ntohl(tp->th_seq);
+			if ( base_seq == endpoint->LastSeq() )
+				// SEQ == rcv_nxt
+				Reset();
+			else
+				return;
+			}
 		}
 
 	SetPartialStatus(flags, endpoint->IsOrig());
