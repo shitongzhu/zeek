@@ -1283,7 +1283,7 @@ bool TCP_Analyzer::IsRSTPacketWithSEQOfRightmostSACK(const struct tcphdr* tp, bo
 	uint32_t seq = endpoint->ToRelativeSeqSpace(pkt_seq, endpoint->SeqWraps());
 	uint32_t rightmost_sack = endpoint->GetRightmostSACK();
 
-	if ( flags.RST() && seq == rightmost_sack )
+	if ( flags.RST() && !IsSEQEqualToRcvNxt(tp, orig) && seq == rightmost_sack )
 		return true;
 
 	return false;
