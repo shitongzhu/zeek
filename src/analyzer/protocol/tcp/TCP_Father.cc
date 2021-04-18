@@ -171,8 +171,9 @@ void TCP_FatherAnalyzer::Undelivered(uint64_t seq, int len, bool orig)
 
 void TCP_FatherAnalyzer::FlipRoles()
 {
-    std::cerr << "TCP_FatherAnalyzer::FlipRoles not implemented!\n";
-    assert(false);
+    for (TCP_Analyzer *tcp_child : tcp_children) {
+        tcp_child->FlipRoles();
+    }
 }
 
 void TCP_FatherAnalyzer::SetSkip(bool do_skip)
