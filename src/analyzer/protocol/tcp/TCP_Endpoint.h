@@ -245,6 +245,10 @@ public:
 	// for tracking history.
 	uint64_t hist_last_SYN, hist_last_FIN, hist_last_RST;
 
+	// wzj: for timestamp validation
+	uint32_t curr_ts_val;
+	uint32_t last_ts_val;
+
 protected:
 	int64_t start_seq;	// Initial TCP sequence number in host order.
 				// Signed 64-bit to detect initial sequence wrapping.

@@ -517,8 +517,10 @@ static void update_window(TCP_Endpoint* endpoint, unsigned int window,
 	// such recisions occur frequently in practice, probably as the
 	// receiver loses buffer memory due to its process going away.
 
-	if ( ! flags.SYN() && ! flags.FIN() && ! flags.RST() &&
-	     endpoint->state != TCP_ENDPOINT_CLOSED &&
+	//if ( ! flags.SYN() && ! flags.FIN() && ! flags.RST() &&
+	//     endpoint->state != TCP_ENDPOINT_CLOSED &&
+	//     endpoint->state != TCP_ENDPOINT_RESET )
+	if ( ! flags.SYN() && ! flags.RST() &&
 	     endpoint->state != TCP_ENDPOINT_RESET )
 		{
 		// ### Decide whether to accept new window based on Active
@@ -1225,6 +1227,25 @@ bool TCP_Analyzer::IsInWindowRSTPacketInESTABLISHED(const struct tcphdr* tp, boo
 	return false;
         }
 
+bool TCP_Analyzer::IsAckNumberTooOldInESTABLISHED(const struct tcphdr* tp, bool is_orig)
+	{
+        TCP_Flags flags(tp);
+	TCP_Endpoint* endpoint = is_orig ? orig : resp;
+	
+	// Sanity check
+	if ( !endpoint )
+		return false;
+
+	uint32_t ack = (uint32_t) ntohl(tp->th_ack);
+	//int32_t delta = seq_delta(ack, endpoint->AckSeq());
+	int32_t delta = seq_delta(ack, endpoint->window_ack_seq);
+
+        if ( endpoint->state == TCP_ENDPOINT_ESTABLISHED && flags.ACK() && delta < -(int32_t)endpoint->window )
+		return true;
+
+	return false;
+	}
+
 bool TCP_Analyzer::IsNoACKPacketInESTABLISHED(const struct tcphdr* tp, bool is_orig, int len)
         {
         TCP_Flags flags(tp);
@@ -1234,7 +1255,12 @@ bool TCP_Analyzer::IsNoACKPacketInESTABLISHED(const struct tcphdr* tp, bool is_o
 	if ( !endpoint )
 		return false;
 
-        if ( !flags.ACK() && endpoint->state == TCP_ENDPOINT_ESTABLISHED && (len > 0))
+	// Data without ACK
+        if ( endpoint->state == TCP_ENDPOINT_ESTABLISHED && len > 0 && !flags.ACK() )
+		return true;
+
+	// Pure FIN without ACK
+        if ( endpoint->state == TCP_ENDPOINT_ESTABLISHED && flags.FIN() && !flags.ACK() )
 		return true;
 
 	return false;
@@ -1289,6 +1315,44 @@ bool TCP_Analyzer::IsRSTPacketWithSEQOfRightmostSACK(const struct tcphdr* tp, bo
 	return false;
         }
 
+bool TCP_Analyzer::IsRSTAfterFINInClosingStates(const struct tcphdr* tp, bool is_orig)
+	{
+        TCP_Flags flags(tp);
+	TCP_Endpoint* endpoint = is_orig ? orig : resp;
+	
+	// Sanity check
+	if ( !endpoint )
+		return false;
+
+	uint32_t seq = (uint32_t) ntohl(tp->th_seq);
+	int32_t delta = seq_delta(seq, endpoint->window_seq);
+
+        if ( endpoint->state == TCP_ENDPOINT_CLOSED && flags.RST() && delta == -1 )
+		return true;
+
+	return false;
+	}
+
+bool TCP_Analyzer::IsDataWithOldAckNumInClosingStates(const struct tcphdr* tp, bool is_orig, int len)
+	{
+        TCP_Flags flags(tp);
+	TCP_Endpoint* endpoint = is_orig ? orig : resp;
+	
+	// Sanity check
+	if ( !endpoint )
+		return false;
+
+	uint32_t seq = (uint32_t) ntohl(tp->th_seq);
+	uint32_t ack = (uint32_t) ntohl(tp->th_ack);
+	int32_t seq_dt = seq_delta(seq, endpoint->window_seq);
+	int32_t ack_dt = seq_delta(ack, endpoint->window_ack_seq);
+
+        if ( endpoint->state == TCP_ENDPOINT_CLOSED && flags.ACK() && len > 0 && ack_dt < 0 && seq_dt < 0 && seq_dt + len > 0 )
+		return true;
+
+	return false;
+	}
+
 void TCP_Analyzer::DeliverPacket(int len, const u_char* data, bool is_orig,
 					uint64_t seq, const IP_Hdr* ip, int caplen)
 	{
@@ -1305,6 +1369,23 @@ void TCP_Analyzer::DeliverPacket(int len, const u_char* data, bool is_orig,
 
 	TCP_Endpoint* endpoint = is_orig ? orig : resp;
 	TCP_Endpoint* peer = endpoint->peer;
+
+	// since we refilled truncated payload, the checksum is wrong
+	//if ( ! ValidateChecksum(ip, tp, endpoint, len, caplen) )
+	//	return;
+
+	endpoint->curr_ts_val = 0xffffffff;
+
+	// Timestmap validation (PAWS check)
+	if ( ParseTCPTimestampOption(tp, is_orig) )
+		{
+		if ( (int32_t) (endpoint->last_ts_val - endpoint->curr_ts_val) > 1 )
+			{
+			// PAWS check failed
+			return;
+			}
+		endpoint->last_ts_val = endpoint->curr_ts_val;
+		}
 
 	// ZST: Robust-NIDS
 	// The following are actions taken in each ambiguity
@@ -1350,11 +1431,29 @@ void TCP_Analyzer::DeliverPacket(int len, const u_char* data, bool is_orig,
 			DBG_LOG(DBG_ANALYZER, "%s AMBI_IN_WINDOW_SYN. Old behavior: reset the connection.",
 			        fmt_analyzer(this).c_str());
 			Reset();
+			return;
 			}
 		else if ( ambiguity_behavior[AMBI_IN_WINDOW_SYN] == AMBI_BEHAV_NEW )
 			{
 			// new behavior: discard the packet and send challenge ACK (not implemented)
 			DBG_LOG(DBG_ANALYZER, "%s AMBI_IN_WINDOW_SYN. New behavior: discard.",
+			        fmt_analyzer(this).c_str());
+			return;
+			}
+		}
+
+	if ( curr_pkt_ambiguities[AMBI_TOO_OLD_ACK_NUM] ) 
+		{
+		if ( ambiguity_behavior[AMBI_TOO_OLD_ACK_NUM] == AMBI_BEHAV_OLD )
+			{
+			// old behavior: accept the packet
+			DBG_LOG(DBG_ANALYZER, "%s AMBI_TOO_OLD_ACK_NUM. Old behavior: accept.",
+			        fmt_analyzer(this).c_str());
+			}
+		else if ( ambiguity_behavior[AMBI_TOO_OLD_ACK_NUM] == AMBI_BEHAV_NEW )
+			{
+			// new behavior: discard the packet
+			DBG_LOG(DBG_ANALYZER, "%s AMBI_TOO_OLD_ACK_NUM. New behavior: discard.",
 			        fmt_analyzer(this).c_str());
 			return;
 			}
@@ -1388,6 +1487,7 @@ void TCP_Analyzer::DeliverPacket(int len, const u_char* data, bool is_orig,
 			DBG_LOG(DBG_ANALYZER, "%s AMBI_IN_WINDOW_RST and AMBI_RST_RIGHTMOST_SACK. Old behavior: reset the connection.",
 			        fmt_analyzer(this).c_str());
 			Reset();
+			return;
 			}
 		else if ( ambiguity_behavior[AMBI_IN_WINDOW_RST] == AMBI_BEHAV_NEW && ambiguity_behavior[AMBI_RST_RIGHTMOST_SACK] == AMBI_BEHAV_OLD )
 			{
@@ -1402,6 +1502,7 @@ void TCP_Analyzer::DeliverPacket(int len, const u_char* data, bool is_orig,
 			DBG_LOG(DBG_ANALYZER, "%s AMBI_IN_WINDOW_RST and AMBI_RST_RIGHTMOST_SACK. New behavior: reset the connection.",
 			        fmt_analyzer(this).c_str());
 			Reset();
+			return;
 			}
 		}
 	else if ( curr_pkt_ambiguities[AMBI_IN_WINDOW_RST] )
@@ -1412,6 +1513,7 @@ void TCP_Analyzer::DeliverPacket(int len, const u_char* data, bool is_orig,
 			DBG_LOG(DBG_ANALYZER, "%s AMBI_IN_WINDOW_RST. Old behavior: reset the connection.",
 				fmt_analyzer(this).c_str());
 			Reset();
+			return;
 			}
 		else if ( ambiguity_behavior[AMBI_IN_WINDOW_RST] == AMBI_BEHAV_NEW )
 			{
@@ -1436,21 +1538,66 @@ void TCP_Analyzer::DeliverPacket(int len, const u_char* data, bool is_orig,
 			DBG_LOG(DBG_ANALYZER, "%s AMBI_RST_RIGHTMOST_SACK. New behavior: reset the connection.",
 			        fmt_analyzer(this).c_str());
 			Reset();
+			return;
 			}
 		}
 
-	// since we refilled truncated payload, the checksum is wrong
-	//if ( ! ValidateChecksum(ip, tp, endpoint, len, caplen) )
-	//	return;
+	if ( curr_pkt_ambiguities[AMBI_RST_AFTER_FIN] ) 
+		{
+		if ( ambiguity_behavior[AMBI_RST_AFTER_FIN] == AMBI_BEHAV_OLD )
+			{
+			// old behavior: discard the packet
+			DBG_LOG(DBG_ANALYZER, "%s AMBI_RST_AFTER_FIN. Old behavior: discard.",
+			        fmt_analyzer(this).c_str());
+			return;
+			}
+		else if ( ambiguity_behavior[AMBI_RST_AFTER_FIN] == AMBI_BEHAV_NEW )
+			{
+			// new behavior: reset the connection
+			DBG_LOG(DBG_ANALYZER, "%s AMBI_RST_AFTER_FIN. New behavior: reset the connection.",
+			        fmt_analyzer(this).c_str());
+			Reset();
+			return;
+			}
+		}
+	else if ( curr_pkt_ambiguities[AMBI_DATA_IN_CLOSING_STATES] ) 
+		{
+		if ( ambiguity_behavior[AMBI_DATA_IN_CLOSING_STATES] == AMBI_BEHAV_OLD )
+			{
+			// old behavior: reset the connection
+			DBG_LOG(DBG_ANALYZER, "%s AMBI_DATA_IN_CLOSING_STATES. Old behavior: reset the connection.",
+			        fmt_analyzer(this).c_str());
+			Reset();
+			return;
+			}
+		else if ( ambiguity_behavior[AMBI_DATA_IN_CLOSING_STATES] == AMBI_BEHAV_NEW )
+			{
+			// new behavior: discard and send challenge ACK (not imeplemented)
+			DBG_LOG(DBG_ANALYZER, "%s AMBI_DATA_IN_CLOSING_STATES. New behavior: discard.",
+			        fmt_analyzer(this).c_str());
+			return;
+			}
+		}
 
 	uint32_t tcp_hdr_len = data - (const u_char*) tp;
 	TCP_Flags flags(tp);
 
 	// validate TCP flags
-	if ( endpoint->state == TCP_ENDPOINT_INACTIVE || endpoint->state == TCP_ENDPOINT_RESET )
+	// invalid combinations
+	if ( ( flags.SYN() && flags.RST() ) || ( flags.RST() && flags.FIN() ) )
+		return;
+	
+	if ( endpoint->state == TCP_ENDPOINT_INACTIVE || endpoint->state == TCP_ENDPOINT_RESET || 
+			endpoint->state == TCP_ENDPOINT_SYN_ACK_SENT )
 		{
 		if ( flags.RST() )
 			return;
+		}
+	else if ( endpoint->state == TCP_ENDPOINT_SYN_ACK_SENT )
+		{
+		if ( flags.SYN() && ! flags.ACK() )
+			// seen a SYN packet after a SYN/ACK packet
+			is_partial = 0;
 		}
 	else 
 		{
@@ -1461,11 +1608,23 @@ void TCP_Analyzer::DeliverPacket(int len, const u_char* data, bool is_orig,
 		if ( flags.RST() )
 			{
 			uint32_t base_seq = ntohl(tp->th_seq);
-			if ( base_seq == endpoint->LastSeq() )
+			if ( base_seq == endpoint->window_seq )
+				{
 				// SEQ == rcv_nxt
 				Reset();
+				return;
+				}
 			else
 				return;
+			}
+		if ( flags.FIN() )
+			{
+			uint32_t base_seq = ntohl(tp->th_seq);
+			if ( base_seq != endpoint->window_seq )
+				{
+				// SEQ != rcv_nxt
+				return;
+				}
 			}
 		}
 
@@ -1485,11 +1644,20 @@ void TCP_Analyzer::DeliverPacket(int len, const u_char* data, bool is_orig,
 					  endpoint->SeqWraps(), &seq_underflow);
 
 	if ( seq_underflow && ! flags.RST() )
+		{
 		// Can't tell if if this is a retransmit/out-of-order or something
 		// before the sequence Bro initialized the endpoint at or the TCP is
 		// just broken and sending garbage sequences.  In either case, some
 		// standard analysis doesn't apply (e.g. reassembly).
 		Weird("TCP_seq_underflow_or_misorder");
+
+		// wzj: trim underflow data
+		int32_t rel_seq2 = rel_seq;
+		assert(rel_seq2 < 0);
+		data += -rel_seq2;
+		rel_seq = 0;
+		seq_underflow = false;
+		}
 
 	update_history(flags, endpoint, rel_seq, len);
 
@@ -1616,12 +1784,21 @@ void TCP_Analyzer::DeliverPacket(int len, const u_char* data, bool is_orig,
 	uint64_t rel_data_seq = flags.SYN() ? rel_seq + 1 : rel_seq;
 
 	int need_contents = 0;
+	// Do not deliver data in SYN packet
 	if ( len > 0 && (caplen >= len || packet_children.size()) &&
-	     ! flags.RST() && ! Skipping() && ! seq_underflow )
+	     ! flags.RST() && ! flags.SYN() && ! Skipping() && ! seq_underflow )
+	//if ( len > 0 && (caplen >= len || packet_children.size()) &&
+	//     ! flags.RST() && ! Skipping() && ! seq_underflow )
 		need_contents = DeliverData(run_state::current_timestamp, data, len, caplen, ip,
 		                            tp, endpoint, rel_data_seq, is_orig, flags);
 
-	update_window(endpoint, ntohs(tp->th_win), endpoint->StartSeq() + endpoint->contents_processor->LastReassemSeq(), ack_seq, flags);
+	uint32_t seq_nxt = endpoint->StartSeq() + endpoint->contents_processor->LastReassemSeq();
+	// handle the FIN flag
+	if ( flags.FIN() ) 
+		{
+		++seq_nxt;
+		}
+	update_window(endpoint, ntohs(tp->th_win), seq_nxt, ack_seq, flags);
 
 	endpoint->CheckEOF();
 
@@ -2343,6 +2520,65 @@ bool TCP_Analyzer::ValidateMD5Option(const struct tcphdr* tcp)
 	return true;
 	}
 
+bool TCP_Analyzer::ParseTCPTimestampOption(const struct tcphdr* tcp, bool is_orig)
+	{
+	// Parse TCP options.
+	const u_char* options = (const u_char*) tcp + sizeof(struct tcphdr);
+	const u_char* opt_end = (const u_char*) tcp + tcp->th_off * 4;
+
+	//if ( !tcp )
+	//	return;
+
+	TCP_Endpoint* endpoint = is_orig ? orig : resp;
+	TCP_Endpoint* peer = endpoint->peer;
+
+	while ( options < opt_end )
+		{
+		unsigned int opt = options[0];
+		unsigned int opt_len;
+		
+		if ( opt < 2 )
+			opt_len = 1;
+		else if ( options + 1 >= opt_end )
+			// We've run off the end, no room for the length.
+			break;
+		else
+			opt_len = options[1];
+       	
+		if ( opt_len == 0 )
+			break;  // trashed length field
+
+		if ( options + opt_len > opt_end )
+			// No room for rest of option.
+			break;
+       	
+		if ( opt == TCPOPT_EOL )
+		// All done - could flag if more junk left over ....
+			break;
+		
+		if ( opt == 8 )  //TCP Timestamp Option
+			{
+			// timestamps
+			if ( opt_len == 10 )
+				{
+				auto send = ntohl(*reinterpret_cast<const uint32_t*>(options + 2));
+				auto echo = ntohl(*reinterpret_cast<const uint32_t*>(options + 6));
+				endpoint->curr_ts_val = send;
+				return true;
+				}
+			else
+				{
+				Weird("tcp_option_timestamps_invalid_len", util::fmt("%d", opt_len));
+				return false;
+				}
+			}
+
+		options += opt_len;
+		}
+
+	return false;
+	}
+
 bool TCP_Analyzer::CheckAmbiguity(const u_char* data, int len, int caplen, bool is_orig)
 	{
 		bool found = false;
@@ -2384,6 +2620,13 @@ bool TCP_Analyzer::CheckAmbiguity(const u_char* data, int len, int caplen, bool 
 			curr_pkt_ambiguities[AMBI_IN_WINDOW_RST] = true;
 			found = true;
 			}
+
+		if ( IsAckNumberTooOldInESTABLISHED(tp, is_orig) )
+			{
+			Conn()->RegisterAmbiguity(AMBI_TOO_OLD_ACK_NUM);
+			curr_pkt_ambiguities[AMBI_TOO_OLD_ACK_NUM] = true;
+			found = true;
+			}
 		
 		if ( IsNoACKPacketInESTABLISHED(tp, is_orig, len) )
 			{
@@ -2396,6 +2639,20 @@ bool TCP_Analyzer::CheckAmbiguity(const u_char* data, int len, int caplen, bool 
 			{
 			Conn()->RegisterAmbiguity(AMBI_RST_RIGHTMOST_SACK);
 			curr_pkt_ambiguities[AMBI_RST_RIGHTMOST_SACK] = true;
+			found = true;
+			}
+
+		if ( IsRSTAfterFINInClosingStates(tp, is_orig) )
+			{
+			Conn()->RegisterAmbiguity(AMBI_RST_AFTER_FIN);
+			curr_pkt_ambiguities[AMBI_RST_AFTER_FIN] = true;
+			found = true;
+			}
+
+		if ( IsDataWithOldAckNumInClosingStates(tp, is_orig, len) )
+			{
+			Conn()->RegisterAmbiguity(AMBI_DATA_IN_CLOSING_STATES);
+			curr_pkt_ambiguities[AMBI_DATA_IN_CLOSING_STATES] = true;
 			found = true;
 			}
 

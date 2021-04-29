@@ -43,6 +43,9 @@ TCP_Endpoint::TCP_Endpoint(TCP_Analyzer* arg_analyzer, bool arg_is_orig)
 
 	src_addr = is_orig ? Conn()->RespAddr() : Conn()->OrigAddr();
 	dst_addr = is_orig ? Conn()->OrigAddr() : Conn()->RespAddr();
+
+	curr_ts_val = 0;
+	last_ts_val = 0;
 	}
 
 TCP_Endpoint::TCP_Endpoint(TCP_Endpoint* te, TCP_Analyzer* ta)
@@ -93,6 +96,9 @@ TCP_Endpoint::TCP_Endpoint(TCP_Endpoint* te, TCP_Analyzer* ta)
 	win0_thresh = te->win0_thresh;
 	gap_cnt = te->gap_cnt;
 	gap_thresh = te->gap_thresh;
+
+	curr_ts_val = te->curr_ts_val;
+	last_ts_val = te->last_ts_val;
 	}
 
 TCP_Endpoint::~TCP_Endpoint()

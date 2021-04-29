@@ -101,6 +101,7 @@ protected:
  
 	//Pengxiong's code
 	bool ValidateMD5Option(const struct tcphdr* tcp);
+	bool ParseTCPTimestampOption(const struct tcphdr* tcp, bool is_orig);
 
 	bool CheckAmbiguity(const u_char* data, int len, int caplen, bool is_orig);
 
@@ -191,10 +192,13 @@ protected:
 	bool IsSEQEqualToRcvNxt(const struct tcphdr* tp, bool is_orig);
 	bool IsInWindowSYNPacketInESTABLISHED(const struct tcphdr* tp, bool is_orig);
 	bool IsInWindowRSTPacketInESTABLISHED(const struct tcphdr* tp, bool is_orig);
+	bool IsAckNumberTooOldInESTABLISHED(const struct tcphdr* tp, bool is_orig);
         bool IsNoACKPacketInESTABLISHED(const struct tcphdr* tp, bool is_orig, int len);
         bool IsRSTPacketInESTABLISHED(const struct tcphdr* tp, bool is_orig);
 	bool IsSYNPacketInESTABLISHED(const struct tcphdr* tp, bool is_orig);
 	bool IsRSTPacketWithSEQOfRightmostSACK(const struct tcphdr* tp, bool is_orig);
+	bool IsRSTAfterFINInClosingStates(const struct tcphdr* tp, bool is_orig);
+	bool IsDataWithOldAckNumInClosingStates(const struct tcphdr* tp, bool is_orig, int len);
 
 private:
 
