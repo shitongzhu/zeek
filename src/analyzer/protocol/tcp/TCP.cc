@@ -1165,7 +1165,7 @@ bool TCP_Analyzer::IsInWindowPacket(const struct tcphdr* tp, bool is_orig)
 	uint32_t seq = (uint32_t) ntohl(tp->th_seq);
 	int32_t delta = seq_delta(seq, endpoint->window_seq);
 	
-        if ( delta >= 0 && delta < endpoint->window )
+        if ( delta >= 0 && delta < (int32_t) endpoint->window )
 		return true;
 
 	return false;
@@ -2181,7 +2181,10 @@ void TCP_Analyzer::DeleteTimer(double /* t */)
 
 void TCP_Analyzer::ConnDeleteTimer(double t)
 	{
-	Conn()->DeleteTimer(t);
+	if (tcp_father)
+		tcp_father->RemoveChildAnalyzer(GetID());
+	else
+		Conn()->DeleteTimer(t);
 	}
 
 void TCP_Analyzer::SetContentsFile(unsigned int direction, FilePtr f)
