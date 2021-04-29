@@ -1587,8 +1587,7 @@ void TCP_Analyzer::DeliverPacket(int len, const u_char* data, bool is_orig,
 	if ( ( flags.SYN() && flags.RST() ) || ( flags.RST() && flags.FIN() ) )
 		return;
 	
-	if ( endpoint->state == TCP_ENDPOINT_INACTIVE || endpoint->state == TCP_ENDPOINT_RESET || 
-			endpoint->state == TCP_ENDPOINT_SYN_ACK_SENT )
+	if ( endpoint->state == TCP_ENDPOINT_INACTIVE || endpoint->state == TCP_ENDPOINT_RESET )
 		{
 		if ( flags.RST() )
 			return;
@@ -1651,12 +1650,17 @@ void TCP_Analyzer::DeliverPacket(int len, const u_char* data, bool is_orig,
 		// standard analysis doesn't apply (e.g. reassembly).
 		Weird("TCP_seq_underflow_or_misorder");
 
-		// wzj: trim underflow data
-		int32_t rel_seq2 = rel_seq;
-		assert(rel_seq2 < 0);
-		data += -rel_seq2;
-		rel_seq = 0;
-		seq_underflow = false;
+		int32_t signed_rel_seq = rel_seq;
+		assert(signed_rel_seq < 0);
+		if ( signed_rel_seq + len > 0 )
+			{
+			// wzj: trim underflow data
+			uint32_t trim_len = -signed_rel_seq;
+			data += trim_len;
+			len -= trim_len;
+			rel_seq = 0;
+			seq_underflow = false;
+			}
 		}
 
 	update_history(flags, endpoint, rel_seq, len);
