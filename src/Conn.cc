@@ -128,7 +128,6 @@ Connection::Connection(NetSessions* s, const detail::ConnIDKey& k, double t,
 
 	// ZST: Robust-NIDS
 	// Mark the begining of the connection
-	printf("CONN_BEGIN\n");
 	InitAmbiguityCount();
 	}
 
@@ -194,7 +193,6 @@ Connection::~Connection()
 
 	// ZST: Robust-NIDS
 	// Mark the teardown of the connection
-	printf("CONN_ENDED\n");
 	PrintAmbiguities();
 	}
 
