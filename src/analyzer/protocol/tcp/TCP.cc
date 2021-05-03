@@ -1389,23 +1389,6 @@ void TCP_Analyzer::DeliverPacket(int len, const u_char* data, bool is_orig,
 
 	// ZST: Robust-NIDS
 	// The following are actions taken in each ambiguity
-	if ( curr_pkt_ambiguities[AMBI_MD5] ) 
-		{
-		if ( ambiguity_behavior[AMBI_MD5] == AMBI_BEHAV_OLD )
-			{
-			// old behavior: accept the packet
-			DBG_LOG(DBG_ANALYZER, "%s AMBI_MD5. Old behavior: accept.",
-			        fmt_analyzer(this).c_str());
-			}
-		else if ( ambiguity_behavior[AMBI_MD5] == AMBI_BEHAV_NEW )
-			{
-			// new behavior: discard the packet
-			DBG_LOG(DBG_ANALYZER, "%s AMBI_MD5. New behavior: discard.",
-			        fmt_analyzer(this).c_str());
-			return;
-			}
-		}
-	
 	if ( curr_pkt_ambiguities[AMBI_SYNFIN_IN_LISTEN] ) 
 		{
 		if ( ambiguity_behavior[AMBI_SYNFIN_IN_LISTEN] == AMBI_BEHAV_OLD )
@@ -2600,13 +2583,6 @@ bool TCP_Analyzer::CheckAmbiguity(const u_char* data, int len, int caplen, bool 
 			curr_pkt_ambiguities[i] = false;
 			}
 		
- 		if ( !ValidateMD5Option(tp) )
-			{
-			Conn()->RegisterAmbiguity(AMBI_MD5);
- 			curr_pkt_ambiguities[AMBI_MD5] = true;
-			found = true;
-			}
-
 		if ( IsSYNFINPacketInLISTEN(tp, is_orig) )
 			{
 			Conn()->RegisterAmbiguity(AMBI_SYNFIN_IN_LISTEN);
