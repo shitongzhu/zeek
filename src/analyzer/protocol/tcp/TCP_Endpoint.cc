@@ -50,7 +50,7 @@ TCP_Endpoint::TCP_Endpoint(TCP_Analyzer* arg_analyzer, bool arg_is_orig)
 
 TCP_Endpoint::TCP_Endpoint(TCP_Endpoint* te, TCP_Analyzer* ta)
 	{
-	printf("TCP_Endpoint copy ctor\n");
+	//printf("TCP_Endpoint copy ctor\n");
 	state = te->state;
 	prev_state = te->prev_state;
 	peer = nullptr;

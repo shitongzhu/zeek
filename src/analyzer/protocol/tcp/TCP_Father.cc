@@ -69,10 +69,10 @@ void TCP_FatherAnalyzer::NextPacket(int len, const u_char* data, bool is_orig,
                 // fork TCP Analyzer if there's any ambiguities with undefined behaviors
                 for (int ambiguity_id = 0; ambiguity_id < AMBI_MAX; ambiguity_id++) {
                     if (tcp_child->curr_pkt_ambiguities[ambiguity_id]) {
-                        std::cout << "State " << i << ": found ambiguity: " << ambiguity_id << "\n";
+                        //std::cout << "State " << i << ": found ambiguity: " << ambiguity_id << "\n";
                         if (tcp_child->ambiguity_behavior[ambiguity_id] == AMBI_BEHAV_UNDEF) {
                             // fork
-                            std::cout << "Forking State " << i << "\n";
+                            //std::cout << "Forking State " << i << "\n";
                             TCP_Analyzer *tcp_child_forked = Fork(tcp_child);
                             new_tcp_children.push_back(tcp_child_forked);
                             
@@ -406,9 +406,9 @@ void TCP_FatherAnalyzer::AddChildPacketAnalyzer(Analyzer *analyzer)
 
 TCP_Analyzer* TCP_FatherAnalyzer::Fork(TCP_Analyzer* ta)
 {
-    ta->DumpAnalyzerTree();
+    //ta->DumpAnalyzerTree();
     TCP_Analyzer *copy = new TCP_Analyzer(ta);
-    copy->DumpAnalyzerTree();
+    //copy->DumpAnalyzerTree();
 
     return copy;
 }

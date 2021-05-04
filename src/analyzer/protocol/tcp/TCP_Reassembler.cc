@@ -64,7 +64,7 @@ TCP_Reassembler::TCP_Reassembler(TCP_Reassembler* tr,
 				 TCP_Endpoint* arg_endp, FilePtr f)
 : Reassembler(tr)
 	{
-	printf("TCP_Reassembler copy ctor\n");
+	//printf("TCP_Reassembler copy ctor\n");
 	endp = arg_endp;
 
 	deliver_tcp_contents = tr->deliver_tcp_contents;

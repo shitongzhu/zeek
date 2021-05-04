@@ -410,6 +410,7 @@ bool Manager::BuildInitialAnalyzerTree(Connection* conn)
 			int resp_port = ntohs(conn->RespPort());
 			tag_set* ports = LookupPort(conn->ConnTransport(), resp_port, false);
 
+			/*
 			if ( ports )
 				{
 				for ( tag_set::const_iterator j = ports->begin(); j != ports->end(); ++j )
@@ -424,6 +425,7 @@ bool Manager::BuildInitialAnalyzerTree(Connection* conn)
 					                  analyzer_mgr->GetComponentName(*j).c_str(), resp_port);
 					}
 				}
+			*/
 			}
 		}
 

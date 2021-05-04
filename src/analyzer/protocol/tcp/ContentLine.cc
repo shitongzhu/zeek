@@ -23,7 +23,7 @@ ContentLine_Analyzer::ContentLine_Analyzer(const char* name, Connection* conn, b
 ContentLine_Analyzer::ContentLine_Analyzer(ContentLine_Analyzer* cla)
 : TCP_SupportAnalyzer(cla)
 	{
-	printf("ContentLine_Analyzer copy ctor\n");
+	//printf("ContentLine_Analyzer copy ctor\n");
 	buf = new u_char[cla->buf_len];
 	memcpy(buf, cla->buf, cla->buf_len);
 	offset = cla->offset;

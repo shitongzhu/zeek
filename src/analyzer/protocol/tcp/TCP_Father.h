@@ -118,7 +118,7 @@ public:
     void AddChildPacketAnalyzer(Analyzer *analyzer);
 
     static analyzer::Analyzer* Instantiate(Connection* conn)
-        { printf("BIBIBIBIBIBIBI.\n"); return new TCP_FatherAnalyzer(conn); }
+        { return new TCP_FatherAnalyzer(conn); }
 
 private:
     TCP_Analyzer* Fork(TCP_Analyzer *ta);

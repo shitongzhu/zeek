@@ -31,7 +31,7 @@ public:
  
 	TCP_Endpoint(TCP_Endpoint *te, TCP_Analyzer* ta);
 
-	TCP_Endpoint* Clone() { printf("TCP_Endpoint Clone\n"); return new TCP_Endpoint(*this); }
+	TCP_Endpoint* Clone() { return new TCP_Endpoint(*this); }
 
 	void Done();
 

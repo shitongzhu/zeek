@@ -870,7 +870,7 @@ HTTP_Analyzer::HTTP_Analyzer(Connection* conn)
 HTTP_Analyzer::HTTP_Analyzer(HTTP_Analyzer* ha)
 : analyzer::tcp::TCP_ApplicationAnalyzer(ha)
 	{
-	printf("HTTP_Analyzer copy ctor\n");
+	//printf("HTTP_Analyzer copy ctor\n");
 	request_state = ha->request_state;
 	reply_state = ha->reply_state;
 	num_requests = ha->num_requests;
@@ -899,14 +899,14 @@ HTTP_Analyzer::HTTP_Analyzer(HTTP_Analyzer* ha)
 	if(ha->unescaped_URI)
 		unescaped_URI = make_intrusive<StringVal>((const char*)ha->unescaped_URI->AsString()->Bytes());
 
-	printf("clone ha->unanswered_requests. len: %d\n", ha->unanswered_requests.size());
+	//printf("clone ha->unanswered_requests. len: %d\n", ha->unanswered_requests.size());
 	std::queue<StringValPtr> tmp_unanswered_requests = ha->unanswered_requests;
 	while (!tmp_unanswered_requests.empty())
 		{
 		unanswered_requests.push(make_intrusive<StringVal>((const char*)tmp_unanswered_requests.front()->AsString()->Bytes()));
 		tmp_unanswered_requests.pop();
 		}
-	printf("clone ha->unanswered_requests. done. len: %d\n", ha->unanswered_requests.size());
+	//printf("clone ha->unanswered_requests. done. len: %d\n", ha->unanswered_requests.size());
 
 	reply_code = ha->reply_code;
 	if(ha->reply_reason_phrase)

@@ -132,7 +132,7 @@ void Analyzer::CtorInit(const Tag& arg_tag, Connection* arg_conn)
 //Pengxiong's code
 Analyzer::Analyzer(Analyzer* a)
 	{
-	printf("Analyzer copy ctor\n");
+	//printf("Analyzer copy ctor\n");
 	tag = a->tag;
 	id = ++id_counter;//TODO:?
 
@@ -145,10 +145,10 @@ Analyzer::Analyzer(Analyzer* a)
 	output_handler = a->output_handler;
 
 	//children.clear();
-	printf("clone children\n");
+	//printf("clone children\n");
 	LOOP_OVER_GIVEN_CONST_CHILDREN(i, a->children)
 		{
-		printf("clone: %s\n", (*i)->GetAnalyzerName());
+		//printf("clone: %s\n", (*i)->GetAnalyzerName());
 		Analyzer* copy = (*i)->Clone();
 		copy->SetParent(this);
 		children.push_back(copy);
@@ -190,10 +190,10 @@ Analyzer::Analyzer(Analyzer* a)
 	*/
 
 	//new_children.clear();
-	printf("clone new_children\n");
+	//printf("clone new_children\n");
 	LOOP_OVER_GIVEN_CONST_CHILDREN(i, a->new_children)
 		{
-		printf("clone: %s\n", (*i)->GetAnalyzerName());
+		//printf("clone: %s\n", (*i)->GetAnalyzerName());
 		Analyzer* copy = (*i)->Clone();
 		copy->SetParent(this);
 		new_children.push_back(copy);

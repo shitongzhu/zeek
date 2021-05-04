@@ -276,7 +276,7 @@ Reassembler::Reassembler(uint64_t init_seq, ReassemblerType reassem_type)
 Reassembler::Reassembler(Reassembler* r)
 	: block_list(this), old_block_list(this)
 	{
-	printf("Reassembler copy ctor\n");
+	//printf("Reassembler copy ctor\n");
 	for ( auto it = r->block_list.Begin(); it != r->block_list.End(); ++it )
 		{
 		const auto& b = it->second;

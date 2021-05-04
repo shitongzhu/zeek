@@ -246,7 +246,6 @@ public:
 	TCP_ApplicationAnalyzer(TCP_ApplicationAnalyzer* taa)
 		: Analyzer(taa) 
 		{ 
-			printf("TCP_ApplicationAnalyzer copy ctor\n"); 
 			tcp = nullptr; 
 		}
 
@@ -306,7 +305,6 @@ public:
 	TCP_SupportAnalyzer(TCP_SupportAnalyzer* tsa)
 		: analyzer::SupportAnalyzer(tsa)
 		{ 
-			printf("TCP_SupportAnalyzer copy ctor\n"); 
 		}
 
 	Analyzer* Clone() override { return new TCP_SupportAnalyzer(this); }

@@ -161,7 +161,7 @@ TCP_Analyzer::TCP_Analyzer(Connection* conn, TCP_FatherAnalyzer* father)
 TCP_Analyzer::TCP_Analyzer(TCP_Analyzer* ta)
 : TransportLayerAnalyzer(ta)
 	{
-	printf("TCP_Analyzer copy ctor\n");
+	//printf("TCP_Analyzer copy ctor\n");
 	orig = new TCP_Endpoint(ta->orig, this);
 	resp = new TCP_Endpoint(ta->resp, this);
 
@@ -176,10 +176,10 @@ TCP_Analyzer::TCP_Analyzer(TCP_Analyzer* ta)
 			taa->SetTCP(this);
 		}
 
-	printf("clone packet_children\n");
+	//printf("clone packet_children\n");
 	LOOP_OVER_GIVEN_CONST_CHILDREN(i, ta->packet_children)
 		{
-		printf("clone: %s\n", (*i)->GetAnalyzerName());
+		//printf("clone: %s\n", (*i)->GetAnalyzerName());
 		Analyzer *copy = (*i)->Clone();
 		copy->SetParent(this);
     		// Set TCP Analyzer for TCP_ApplicationAnalyzers
