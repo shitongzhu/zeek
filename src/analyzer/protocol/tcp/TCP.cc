@@ -1667,8 +1667,8 @@ void TCP_Analyzer::DeliverPacket(int len, const u_char* data, bool is_orig,
 		Unref(SYN_vals);
 		}
 
-	DBG_LOG(DBG_ANALYZER, "%s %s current receive window: window_seq = %u, window_ack_seq = %u, window = %u.",
-		fmt_analyzer(this).c_str(), is_orig ? "Orig" : "Resp", endpoint->window_seq, endpoint->window_ack_seq, endpoint->window);
+	//DBG_LOG(DBG_ANALYZER, "%s %s current receive window: window_seq = %u, window_ack_seq = %u, window = %u.",
+	//	fmt_analyzer(this).c_str(), is_orig ? "Orig" : "Resp", endpoint->window_seq, endpoint->window_ack_seq, endpoint->window);
 
 	if ( flags.FIN() )
 		{
