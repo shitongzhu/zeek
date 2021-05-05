@@ -193,7 +193,7 @@ Connection::~Connection()
 
 	// ZST: Robust-NIDS
 	// Mark the teardown of the connection
-	//PrintAmbiguities();
+	PrintAmbiguities();
 	}
 
 void Connection::CheckEncapsulation(const std::shared_ptr<EncapsulationStack>& arg_encap)
