@@ -155,6 +155,8 @@ TCP_Analyzer::TCP_Analyzer(Connection* conn, TCP_FatherAnalyzer* father)
 		ambiguity_behavior.push_back(AMBI_BEHAV_UNDEF);
 		}
 
+	sack_seen = false;
+
 	tcp_father = father;
 	}
 
@@ -182,7 +184,7 @@ TCP_Analyzer::TCP_Analyzer(TCP_Analyzer* ta)
 		//printf("clone: %s\n", (*i)->GetAnalyzerName());
 		Analyzer *copy = (*i)->Clone();
 		copy->SetParent(this);
-    		// Set TCP Analyzer for TCP_ApplicationAnalyzers
+		// Set TCP Analyzer for TCP_ApplicationAnalyzers
 		if (TCP_ApplicationAnalyzer *taa = dynamic_cast<TCP_ApplicationAnalyzer*>(copy)) 
 			taa->SetTCP(this);
 		packet_children.push_back(copy);
@@ -199,6 +201,8 @@ TCP_Analyzer::TCP_Analyzer(TCP_Analyzer* ta)
 
 	curr_pkt_ambiguities = ta->curr_pkt_ambiguities;
 	ambiguity_behavior = ta->ambiguity_behavior;
+
+	sack_seen = ta->sack_seen;
 
 	tcp_father = ta->tcp_father;
 	}
@@ -1137,25 +1141,25 @@ static int32_t update_last_seq(TCP_Endpoint* endpoint, uint32_t last_seq,
 // ZST (Robust-NIDS): 
 // Functions for determinig which ambiguity is being encountered
 bool TCP_Analyzer::IsSYNFINPacketInLISTEN(const struct tcphdr* tp, bool is_orig)
-        {
-        TCP_Flags flags(tp);
+	{
+	TCP_Flags flags(tp);
 	TCP_Endpoint* endpoint = is_orig ? orig : resp;
 	
 	// Sanity check
 	if ( !endpoint )
 		return false;
 
-        if ( flags.SYN() && flags.FIN() && !flags.RST() && !flags.ACK() && endpoint->state == TCP_ENDPOINT_INACTIVE )
+	if ( flags.SYN() && flags.FIN() && !flags.RST() && !flags.ACK() && endpoint->state == TCP_ENDPOINT_INACTIVE )
 		return true;
 
 	return false;
-        }
+	}
 
 // Note that since we currenly handle ambiguities BEFORE updating endpoint's 
 // states, we need to be careful in calculating stateful values such as relative 
 // sequence numbers (these values can depend on unupdated states).
 bool TCP_Analyzer::IsInWindowPacket(const struct tcphdr* tp, bool is_orig)
-        {
+	{
 	TCP_Endpoint* endpoint = is_orig ? orig : resp;
 	
 	// Sanity check
@@ -1165,11 +1169,11 @@ bool TCP_Analyzer::IsInWindowPacket(const struct tcphdr* tp, bool is_orig)
 	uint32_t seq = (uint32_t) ntohl(tp->th_seq);
 	int32_t delta = seq_delta(seq, endpoint->window_seq);
 	
-        if ( delta >= 0 && delta < (int32_t) endpoint->window )
+	if ( delta >= 0 && delta < (int32_t) endpoint->window )
 		return true;
 
 	return false;
-        }
+	}
 
 bool TCP_Analyzer::IsSEQEqualToRcvNxt(const struct tcphdr* tp, bool is_orig)
 	{
@@ -1188,8 +1192,8 @@ bool TCP_Analyzer::IsSEQEqualToRcvNxt(const struct tcphdr* tp, bool is_orig)
 	}
 
 bool TCP_Analyzer::IsInWindowSYNPacketInESTABLISHED(const struct tcphdr* tp, bool is_orig)
-        {
-        TCP_Flags flags(tp);
+	{
+	TCP_Flags flags(tp);
 	TCP_Endpoint* endpoint = is_orig ? orig : resp;
 	
 	// Sanity check
@@ -1200,16 +1204,16 @@ bool TCP_Analyzer::IsInWindowSYNPacketInESTABLISHED(const struct tcphdr* tp, boo
 	if ( !endpoint->HasUpdatedInitSeq() )
 		return false;
 
-        if ( flags.SYN() && IsInWindowPacket(tp, is_orig) &&
-	     endpoint->state == TCP_ENDPOINT_ESTABLISHED )
+	if ( tp->th_flags == TH_SYN && IsInWindowPacket(tp, is_orig) &&
+			endpoint->state == TCP_ENDPOINT_ESTABLISHED )
 		return true;
 
 	return false;
-        }
+	}
 
 bool TCP_Analyzer::IsInWindowRSTPacketInESTABLISHED(const struct tcphdr* tp, bool is_orig)
-        {
-        TCP_Flags flags(tp);
+	{
+	TCP_Flags flags(tp);
 	TCP_Endpoint* endpoint = is_orig ? orig : resp;
 	
 	// Sanity check
@@ -1220,16 +1224,16 @@ bool TCP_Analyzer::IsInWindowRSTPacketInESTABLISHED(const struct tcphdr* tp, boo
 	if ( !endpoint->HasUpdatedInitSeq() )
 		return false;
 
-        if ( flags.RST() && IsInWindowPacket(tp, is_orig) && !IsSEQEqualToRcvNxt(tp, is_orig) &&
-	     endpoint->state == TCP_ENDPOINT_ESTABLISHED )
+	if ( flags.RST() && IsInWindowPacket(tp, is_orig) && !IsSEQEqualToRcvNxt(tp, is_orig) &&
+			endpoint->state == TCP_ENDPOINT_ESTABLISHED )
 		return true;
 
 	return false;
-        }
+	}
 
 bool TCP_Analyzer::IsAckNumberTooOldInESTABLISHED(const struct tcphdr* tp, bool is_orig)
 	{
-        TCP_Flags flags(tp);
+	TCP_Flags flags(tp);
 	TCP_Endpoint* endpoint = is_orig ? orig : resp;
 	
 	// Sanity check
@@ -1240,15 +1244,15 @@ bool TCP_Analyzer::IsAckNumberTooOldInESTABLISHED(const struct tcphdr* tp, bool 
 	//int32_t delta = seq_delta(ack, endpoint->AckSeq());
 	int32_t delta = seq_delta(ack, endpoint->window_ack_seq);
 
-        if ( endpoint->state == TCP_ENDPOINT_ESTABLISHED && flags.ACK() && delta < -(int32_t)endpoint->window )
+	if ( endpoint->state == TCP_ENDPOINT_ESTABLISHED && flags.ACK() && ! flags.SYN() && delta < -(int32_t)endpoint->window )
 		return true;
 
 	return false;
 	}
 
 bool TCP_Analyzer::IsNoACKPacketInESTABLISHED(const struct tcphdr* tp, bool is_orig, int len)
-        {
-        TCP_Flags flags(tp);
+	{
+	TCP_Flags flags(tp);
 	TCP_Endpoint* endpoint = is_orig ? orig : resp;
 	
 	// Sanity check
@@ -1256,68 +1260,76 @@ bool TCP_Analyzer::IsNoACKPacketInESTABLISHED(const struct tcphdr* tp, bool is_o
 		return false;
 
 	// Data without ACK
-        if ( endpoint->state == TCP_ENDPOINT_ESTABLISHED && len > 0 && !flags.ACK() )
+	if ( endpoint->state == TCP_ENDPOINT_ESTABLISHED && len > 0 && !flags.ACK() )
 		return true;
 
 	// Pure FIN without ACK
-        if ( endpoint->state == TCP_ENDPOINT_ESTABLISHED && flags.FIN() && !flags.ACK() )
+	if ( endpoint->state == TCP_ENDPOINT_ESTABLISHED && flags.FIN() && !flags.ACK() )
 		return true;
 
 	return false;
-        }
+	}
 
 bool TCP_Analyzer::IsRSTPacketInESTABLISHED(const struct tcphdr* tp, bool is_orig)
-        {
-        TCP_Flags flags(tp);
+	{
+	TCP_Flags flags(tp);
 	TCP_Endpoint* endpoint = is_orig ? orig : resp;
 	
 	// Sanity check
 	if ( !endpoint )
 		return false;
 
-        if ( flags.RST() && endpoint->state == TCP_ENDPOINT_ESTABLISHED )
+	if ( flags.RST() && endpoint->state == TCP_ENDPOINT_ESTABLISHED )
 		return true;
 
 	return false;
-        }
+	}
 
 bool TCP_Analyzer::IsSYNPacketInESTABLISHED(const struct tcphdr* tp, bool is_orig)
-        {
-        TCP_Flags flags(tp);
+	{
+	TCP_Flags flags(tp);
 	TCP_Endpoint* endpoint = is_orig ? orig : resp;
 	
 	// Sanity check
 	if ( !endpoint )
 		return false;
 
-        if ( flags.SYN() && endpoint->state == TCP_ENDPOINT_ESTABLISHED )
+	if ( tp->th_flags == TH_SYN && endpoint->state == TCP_ENDPOINT_ESTABLISHED )
 		return true;
 
 	return false;
-        }
+	}
 
 bool TCP_Analyzer::IsRSTPacketWithSEQOfRightmostSACK(const struct tcphdr* tp, bool is_orig)
-        {
-        TCP_Flags flags(tp);
+	{
+	TCP_Flags flags(tp);
 	TCP_Endpoint* endpoint = is_orig ? orig : resp;
 	
 	// Sanity check
 	if ( !endpoint )
 		return false;
 
-	uint32_t pkt_seq = (uint32_t) ntohl(tp->th_seq);
-	uint32_t seq = endpoint->ToRelativeSeqSpace(pkt_seq, endpoint->SeqWraps());
-	uint32_t rightmost_sack = endpoint->GetRightmostSACK();
+	if ( HasTCPSACKOption(tp) )
+		{
+		sack_seen = true;
+		}
 
-	if ( flags.RST() && !IsSEQEqualToRcvNxt(tp, orig) && seq == rightmost_sack )
-		return true;
+	if ( sack_seen )
+		{
+		uint32_t pkt_seq = (uint32_t) ntohl(tp->th_seq);
+		uint32_t seq = endpoint->ToRelativeSeqSpace(pkt_seq, endpoint->SeqWraps());
+		uint32_t rightmost_sack = endpoint->GetRightmostSACK();
+
+		if ( flags.RST() && IsInWindowPacket(tp, is_orig) && !IsSEQEqualToRcvNxt(tp, is_orig) && seq == rightmost_sack )
+			return true;
+		}
 
 	return false;
-        }
+	}
 
 bool TCP_Analyzer::IsRSTAfterFINInClosingStates(const struct tcphdr* tp, bool is_orig)
 	{
-        TCP_Flags flags(tp);
+	TCP_Flags flags(tp);
 	TCP_Endpoint* endpoint = is_orig ? orig : resp;
 	
 	// Sanity check
@@ -1327,7 +1339,7 @@ bool TCP_Analyzer::IsRSTAfterFINInClosingStates(const struct tcphdr* tp, bool is
 	uint32_t seq = (uint32_t) ntohl(tp->th_seq);
 	int32_t delta = seq_delta(seq, endpoint->window_seq);
 
-        if ( endpoint->state == TCP_ENDPOINT_CLOSED && flags.RST() && delta == -1 )
+	if ( endpoint->state == TCP_ENDPOINT_CLOSED && flags.RST() && delta == -1 )
 		return true;
 
 	return false;
@@ -1335,7 +1347,7 @@ bool TCP_Analyzer::IsRSTAfterFINInClosingStates(const struct tcphdr* tp, bool is
 
 bool TCP_Analyzer::IsDataWithOldAckNumInClosingStates(const struct tcphdr* tp, bool is_orig, int len)
 	{
-        TCP_Flags flags(tp);
+	TCP_Flags flags(tp);
 	TCP_Endpoint* endpoint = is_orig ? orig : resp;
 	
 	// Sanity check
@@ -1347,7 +1359,7 @@ bool TCP_Analyzer::IsDataWithOldAckNumInClosingStates(const struct tcphdr* tp, b
 	int32_t seq_dt = seq_delta(seq, endpoint->window_seq);
 	int32_t ack_dt = seq_delta(ack, endpoint->window_ack_seq);
 
-        if ( endpoint->state == TCP_ENDPOINT_CLOSED && flags.ACK() && len > 0 && ack_dt < 0 && seq_dt < 0 && seq_dt + len > 0 )
+	if ( endpoint->state == TCP_ENDPOINT_CLOSED && flags.ACK() && ! flags.SYN() && len > 0 && ack_dt < 0 && seq_dt < 0 && seq_dt + len > 0 )
 		return true;
 
 	return false;
@@ -1389,6 +1401,23 @@ void TCP_Analyzer::DeliverPacket(int len, const u_char* data, bool is_orig,
 
 	// ZST: Robust-NIDS
 	// The following are actions taken in each ambiguity
+	if ( curr_pkt_ambiguities[AMBI_MD5] ) 
+		{
+		if ( ambiguity_behavior[AMBI_MD5] == AMBI_BEHAV_OLD )
+			{
+			// old behavior: accept the packet
+			DBG_LOG(DBG_ANALYZER, "%s AMBI_MD5. Old behavior: accept.",
+			        fmt_analyzer(this).c_str());
+			}
+		else if ( ambiguity_behavior[AMBI_MD5] == AMBI_BEHAV_NEW )
+			{
+			// new behavior: discard the packet
+			DBG_LOG(DBG_ANALYZER, "%s AMBI_MD5. New behavior: discard.",
+			        fmt_analyzer(this).c_str());
+			return;
+			}
+		}
+
 	if ( curr_pkt_ambiguities[AMBI_SYNFIN_IN_LISTEN] ) 
 		{
 		if ( ambiguity_behavior[AMBI_SYNFIN_IN_LISTEN] == AMBI_BEHAV_OLD )
@@ -1459,7 +1488,7 @@ void TCP_Analyzer::DeliverPacket(int len, const u_char* data, bool is_orig,
 			}
 		}
 	
-	// IN_WINDOW_RST and RST_RIGHTMOST_SACK can occur at the same time,
+	// IN_WINDOW_RST and RST_RIGHTMOST_SACK have overlapped conditions,
 	// because RST with SEQ == rightmost SACK is also a RST with SEQ in window.
 	// We need to handle this carefully.
 	if ( curr_pkt_ambiguities[AMBI_IN_WINDOW_RST] && curr_pkt_ambiguities[AMBI_RST_RIGHTMOST_SACK] ) 
@@ -1580,6 +1609,15 @@ void TCP_Analyzer::DeliverPacket(int len, const u_char* data, bool is_orig,
 		if ( flags.SYN() && ! flags.ACK() )
 			// seen a SYN packet after a SYN/ACK packet
 			is_partial = 0;
+		if ( flags.FIN() )
+			{
+			uint32_t base_seq = ntohl(tp->th_seq);
+			if ( base_seq != endpoint->window_seq )
+				{
+				// SEQ != rcv_nxt
+				return;
+				}
+			}
 		}
 	else 
 		{
@@ -2468,7 +2506,7 @@ bool TCP_Analyzer::IsReuse(double t, const u_char* pkt)
 	return true;
 	}
 
-bool TCP_Analyzer::ValidateMD5Option(const struct tcphdr* tcp)
+bool TCP_Analyzer::HasTCPMD5Option(const struct tcphdr* tcp)
 	{
 	// Parse TCP options.
 	const u_char* options = (const u_char*) tcp + sizeof(struct tcphdr);
@@ -2482,7 +2520,7 @@ bool TCP_Analyzer::ValidateMD5Option(const struct tcphdr* tcp)
 		unsigned int opt = options[0];
 		
 		if ( opt == 19 )  //TCP MD5 Option
-			return false;
+			return true;
 
 		unsigned int opt_len;
 		
@@ -2507,7 +2545,49 @@ bool TCP_Analyzer::ValidateMD5Option(const struct tcphdr* tcp)
 		// All done - could flag if more junk left over ....
 			break;
 		}
-	return true;
+	return false;
+	}
+
+bool TCP_Analyzer::HasTCPSACKOption(const struct tcphdr* tcp)
+	{
+	// Parse TCP options.
+	const u_char* options = (const u_char*) tcp + sizeof(struct tcphdr);
+	const u_char* opt_end = (const u_char*) tcp + tcp->th_off * 4;
+
+	//if ( !tcp )
+	//	return;
+
+	while ( options < opt_end )
+		{
+		unsigned int opt = options[0];
+		
+		if ( opt == 4 || opt == 5 )  //TCP SAckOK or SAck Option
+			return true;
+
+		unsigned int opt_len;
+		
+		if ( opt < 2 )
+			opt_len = 1;
+		else if ( options + 1 >= opt_end )
+			// We've run off the end, no room for the length.
+			break;
+		else
+			opt_len = options[1];
+       	
+		if ( opt_len == 0 )
+			break;  // trashed length field
+
+		if ( options + opt_len > opt_end )
+			// No room for rest of option.
+			break;
+
+		options += opt_len;
+       	
+		if ( opt == TCPOPT_EOL )
+		// All done - could flag if more junk left over ....
+			break;
+		}
+	return false;
 	}
 
 bool TCP_Analyzer::ParseTCPTimestampOption(const struct tcphdr* tcp, bool is_orig)
@@ -2581,6 +2661,13 @@ bool TCP_Analyzer::CheckAmbiguity(const u_char* data, int len, int caplen, bool 
 		for ( int i = 0; i < AMBI_MAX; i++ )
 			{
 			curr_pkt_ambiguities[i] = false;
+			}
+
+		if ( HasTCPMD5Option(tp) )
+			{
+			Conn()->RegisterAmbiguity(AMBI_MD5);
+ 			curr_pkt_ambiguities[AMBI_MD5] = true;
+			found = true;
 			}
 		
 		if ( IsSYNFINPacketInLISTEN(tp, is_orig) )

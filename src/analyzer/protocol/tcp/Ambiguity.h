@@ -6,6 +6,7 @@ namespace zeek::analyzer::tcp {
 
 enum
 {
+    AMBI_MD5, /* TCP packet with MD5 Option */
     AMBI_SYNFIN_IN_LISTEN, /* SYN + FIN packet in LISTEN state */
     AMBI_IN_WINDOW_SYN, /* In-window SYN in ESTABLISHED state */
     AMBI_IN_WINDOW_RST, /* In-window RST in ESTABLISHED state */

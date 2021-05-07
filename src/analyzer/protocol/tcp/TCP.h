@@ -100,7 +100,8 @@ protected:
 	bool IsReuse(double t, const u_char* pkt) override;
  
 	//Pengxiong's code
-	bool ValidateMD5Option(const struct tcphdr* tcp);
+	bool HasTCPMD5Option(const struct tcphdr* tcp);
+	bool HasTCPSACKOption(const struct tcphdr* tcp);
 	bool ParseTCPTimestampOption(const struct tcphdr* tcp, bool is_orig);
 
 	bool CheckAmbiguity(const u_char* data, int len, int caplen, bool is_orig);
@@ -229,6 +230,8 @@ private:
 	// wzj
 	std::vector<bool> curr_pkt_ambiguities;
 	std::vector<int> ambiguity_behavior;
+
+	bool sack_seen;
 
 	TCP_FatherAnalyzer* tcp_father;
 };

@@ -159,6 +159,8 @@ void Connection::PrintAmbiguities()
 			has_ambi = true;
 			}
 		}
+	printf("Connection: %s\n", fmt_conn_id(OrigAddr(), ntohs(OrigPort()),
+					RespAddr(), ntohs(RespPort())));
 	printf("[AMBIGUITY_COUNT] %s, %ld\n", ss.str().c_str(), total_connections);
 	if ( has_ambi )
 		DBG_LOG(DBG_ANALYZER, "%s has ambiguity: %s", 
